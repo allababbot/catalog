@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Model Catalog - models.dev</title>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="top">
+        <div class="top-inner">
+          <h1 class="title">Model Catalog</h1>
+          <div class="ticker">
+            <span class="stat"><strong id="statProv">0</strong> total provider</span>
+            <span class="stat stat-total"><strong id="statTotal">0</strong> total model</span>
+          </div>
+        </div>
+      </header>
+
+      <div class="error" id="errorBox" hidden></div>
+
+      <div class="main-content">
+        <div class="filters-sidebar">
+          <div class="filter-section">
+            <label class="filter-label">Search</label>
+            <div class="filter-input-wrapper">
+              <input id="searchBox" type="search" placeholder="search model, provider, or family... (e.g. gemini, claude, llama)" />
+            </div>
+          </div>
+          <div class="filter-section">
+            <label class="filter-label">PROVIDER</label>
+            <div class="dropdown-filter">
+              <button class="dropdown-toggle" id="providerToggle" type="button">all</button>
+              <div class="dropdown-menu" id="providerMenu"></div>
+            </div>
+          </div>
+          <div class="filter-section">
+            <label class="filter-label">FAMILY</label>
+            <div class="dropdown-filter">
+              <button class="dropdown-toggle" id="familyToggle" type="button">all</button>
+              <div class="dropdown-menu" id="familyMenu"></div>
+            </div>
+          </div>
+          <div class="filter-section">
+            <label class="filter-label">CAPABILITIES</label>
+            <div class="dropdown-filter">
+              <button class="dropdown-toggle" id="capToggle" type="button">all</button>
+              <div class="dropdown-menu" id="capMenu"></div>
+            </div>
+          </div>
+          <div class="filter-section">
+            <label class="filter-label">MODALITIES INPUT</label>
+            <div class="dropdown-filter">
+              <button class="dropdown-toggle" id="modInToggle" type="button">all</button>
+              <div class="dropdown-menu" id="modInMenu"></div>
+            </div>
+          </div>
+          <div class="filter-section">
+            <label class="filter-label">MODALITIES OUTPUT</label>
+            <div class="dropdown-filter">
+              <button class="dropdown-toggle" id="modOutToggle" type="button">all</button>
+              <div class="dropdown-menu" id="modOutMenu"></div>
+            </div>
+          </div>
+          <div class="filter-section">
+            <div class="range-item">
+              <span class="range-label">CONTEXT RANGE</span>
+              <div class="range-inputs">
+                <input type="number" id="contextMin" placeholder="min" min="0">
+                <span>-</span>
+                <input type="number" id="contextMax" placeholder="max" min="0">
+              </div>
+            </div>
+            <div class="range-item">
+              <span class="range-label">MAX OUTPUT RANGE</span>
+              <div class="range-inputs">
+                <input type="number" id="outputLimitMin" placeholder="min" min="0">
+                <span>-</span>
+                <input type="number" id="outputLimitMax" placeholder="max" min="0">
+              </div>
+            </div>
+            <div class="range-item">
+              <span class="range-label">INPUT COST RANGE</span>
+              <div class="range-inputs">
+                <input type="number" id="costInputMin" placeholder="min" min="0" step="0.01">
+                <span>-</span>
+                <input type="number" id="costInputMax" placeholder="max" min="0" step="0.01">
+              </div>
+            </div>
+            <div class="range-item">
+              <span class="range-label">OUTPUT COST RANGE</span>
+              <div class="range-inputs">
+                <input type="number" id="costOutputMin" placeholder="min" min="0" step="0.01">
+                <span>-</span>
+                <input type="number" id="costOutputMax" placeholder="max" min="0" step="0.01">
+              </div>
+            </div>
+
+          </div>
+          <div class="filter-actions">
+            <label class="exclude-plan">
+              <input type="checkbox" id="excludePlan">
+              <span>exclude plan providers</span>
+            </label>
+            <button class="clear-btn" id="clearBtn">Reset Filters</button>
+          </div>
+        </div>
+        <div class="table-container">
+          <div class="table-shell">
+        <table>
+          <thead>
+            <tr>
+              <th data-key="provider">Provider<span class="arrow">▲</span></th>
+              <th data-key="model">Model<span class="arrow">▲</span></th>
+              <th data-key="context" class="num">Context<span class="arrow">▲</span></th>
+              <th data-key="outputLimit" class="num">Max Out<span class="arrow">▲</span></th>
+              <th data-key="costInput" class="num">$ In<span class="arrow">▲</span></th>
+                            <th data-key="costOutput" class="num">$ Out<span class="arrow">▲</span></th>
+              <th>Capabilities</th>
+              <th>Mod In</th>
+              <th>Mod Out</th>
+              <th data-key="knowledge">Knowledge<span class="arrow">▲</span></th>
+              <th data-key="releaseDate">Release<span class="arrow">▲</span></th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="foot-row">
+        <span id="footInfo">showing 0 of 0 models</span>
+        <nav class="pagination" id="pagination">
+          <button class="page-btn" id="pagePrev" disabled>‹</button>
+          <div class="page-numbers" id="pageNumbers"></div>
+          <button class="page-btn" id="pageNext" disabled>›</button>
+        </nav>
+      </div>
+
+      <div class="footer-meta">
+        <span><b style="color:var(--teal)">R</b> reasoning</span>
+        <span><b style="color:var(--teal)">T</b> tool call</span>
+        <span><b style="color:var(--teal)">V</b> vision/attachment</span>
+        <span><b style="color:var(--teal)">O</b> open weights</span>
+        <span>prices in USD per 1M tokens</span>
+        <span>·</span>
+        <span>data <a href="https://models.dev" target="_blank" rel="noreferrer">models.dev</a></span>
+        <span>·</span>
+        <span>click header to sort</span>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
