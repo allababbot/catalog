@@ -5,7 +5,6 @@
     "moduleResolution": "Bundler",
     "strict": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["bun-types"],
     "skipLibCheck": true,
     "noEmit": true
   },

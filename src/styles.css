@@ -74,6 +74,40 @@
     --rust: #b6492f;
 }
 
+/* ── Dark theme ──────────────────────────────────────── */
+
+[data-theme="dark"] {
+    --paper: #14171c;
+    --paper-raised: #1c2027;
+    --ink: #e6e9ee;
+    --ink-soft: #9aa3b0;
+    --line: #2c323c;
+    --teal: #4fd1c5;
+    --teal-soft: #1f3a38;
+    --amber: #e0a458;
+    --rust: #e07a5f;
+}
+
+[data-theme="dark"] th {
+    background: #232831;
+}
+
+[data-theme="dark"] .error {
+    background: #2a1d1a;
+}
+
+[data-theme="dark"] .cap-chip.rs {
+    background: #2e2519;
+}
+
+[data-theme="dark"] .mod-chip.mod-out {
+    background: #2a1d1a;
+}
+
+[data-theme="dark"] .dropdown-menu label:hover {
+    background: #243038;
+}
+
 * {
     box-sizing: border-box;
 }
@@ -153,6 +187,30 @@ a:hover {
 
 .stat-total strong {
     color: var(--rust);
+}
+
+.theme-toggle {
+    font-family: inherit;
+    font-size: 16px;
+    line-height: 1;
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition:
+        border-color 0.15s,
+        color 0.15s;
+}
+
+.theme-toggle:hover {
+    border-color: var(--teal);
+    color: var(--teal);
 }
 
 .main-content {

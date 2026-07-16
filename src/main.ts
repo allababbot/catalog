@@ -27,6 +27,7 @@ const clearBtn = query<HTMLButtonElement>("#clearBtn");
 const statProv = query<HTMLElement>("#statProv");
 const statTotal = query<HTMLElement>("#statTotal");
 const errorBox = query<HTMLElement>("#errorBox");
+const themeToggle = query<HTMLButtonElement>("#themeToggle");
 const excludePlanCheckbox = query<HTMLInputElement>("#excludePlan");
 const pagePrev = query<HTMLButtonElement>("#pagePrev");
 const pageNext = query<HTMLButtonElement>("#pageNext");
@@ -59,6 +60,32 @@ const CAP_LABELS: Record<string, string> = {
 
 void boot();
 
+// ── Theme (dark mode) ───────────────────────────────────
+
+type Theme = "light" | "dark";
+
+function getInitialTheme(): Theme {
+    const saved = localStorage.getItem("theme");
+    if (saved === "light" || saved === "dark") return saved;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function applyTheme(theme: Theme): void {
+    document.documentElement.dataset.theme = theme;
+    themeToggle.setAttribute("aria-pressed", String(theme === "dark"));
+    const icon = themeToggle.querySelector<HTMLElement>(".theme-icon");
+    if (icon) icon.textContent = theme === "dark" ? "☀" : "☾";
+}
+
+function initTheme(): void {
+    applyTheme(getInitialTheme());
+    themeToggle.addEventListener("click", () => {
+        const next: Theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+        applyTheme(next);
+        localStorage.setItem("theme", next);
+    });
+}
+
 async function boot(): Promise<void> {
     try {
         console.log("Fetching catalog...");
@@ -73,6 +100,7 @@ async function boot(): Promise<void> {
         allRows = normalizeCatalog(catalog);
         console.log("Total rows:", allRows.length);
 
+        initTheme();
         populateFilters(allRows);
         setupDropdowns();
         loadFromURL();
@@ -587,6 +615,7 @@ function buildFilterState(): import("./types/catalog").FilterState {
             min: getRangeValue(rangeInputs.costOutput.min),
             max: getRangeValue(rangeInputs.costOutput.max),
         },
+        costCacheReadRange: {},
         excludePlanProviders: excludePlanCheckbox.checked,
     };
 }
