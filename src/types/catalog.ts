@@ -1,3 +1,5 @@
+import type { Selection } from "./selection";
+
 export interface FilterRange {
     min?: number;
     max?: number;
@@ -79,11 +81,11 @@ export interface ModelRow {
 
 export interface FilterState {
     query: string;
-    providers: Set<string>;
-    families: Set<string>;
-    activeCaps: Set<string>;
-    activeModalitiesInput: Set<string>;
-    activeModalitiesOutput: Set<string>;
+    providers: Selection;
+    families: Selection;
+    activeCaps: Selection;
+    activeModalitiesInput: Selection;
+    activeModalitiesOutput: Selection;
     contextRange: FilterRange;
     outputLimitRange: FilterRange;
     costInputRange: FilterRange;

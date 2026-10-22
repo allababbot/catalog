@@ -21,6 +21,8 @@ export interface FacetItems {
 
 export type FacetKey = keyof FacetItems;
 
+export const FACET_KEYS = ["providers", "families", "caps", "modIn", "modOut"] as const satisfies readonly FacetKey[];
+
 /** What a selection means, without prescribing how the UI words it. */
 export type SelectionDescription =
     | { kind: "all" }

@@ -1,6 +1,8 @@
-import { CAPABILITIES, SORT_KEYS } from "../types/catalog";
+import { SORT_KEYS } from "../types/catalog";
 import type { SortKey } from "../types/catalog";
-import { NONE_MARKER } from "./filters";
+import { allSelection, decodeSelection, encodeSelection } from "./selection";
+import { FACET_KEYS } from "../types/selection";
+import type { FacetItems, Selection } from "../types/selection";
 
 export const RANGE_KEYS = ["context", "outputLimit", "costInput", "costOutput"] as const;
 
@@ -13,11 +15,11 @@ export interface UrlRange {
 
 export interface UrlState {
     query: string;
-    providers: string[];
-    families: string[];
-    caps: string[];
-    modIn: string[];
-    modOut: string[];
+    providers: Selection;
+    families: Selection;
+    caps: Selection;
+    modIn: Selection;
+    modOut: Selection;
     ranges: Record<RangeKey, UrlRange>;
     excludePlan: boolean;
     sort: SortKey;
@@ -38,11 +40,11 @@ export const DEFAULT_DIRECTION: 1 | -1 = -1;
 export function createDefaultUrlState(): UrlState {
     return {
         query: "",
-        providers: [],
-        families: [],
-        caps: [],
-        modIn: [],
-        modOut: [],
+        providers: allSelection(),
+        families: allSelection(),
+        caps: allSelection(),
+        modIn: allSelection(),
+        modOut: allSelection(),
         ranges: {
             context: { min: "", max: "" },
             outputLimit: { min: "", max: "" },
@@ -56,24 +58,18 @@ export function createDefaultUrlState(): UrlState {
     };
 }
 
-export function isCapability(value: string): boolean {
-    return (CAPABILITIES as readonly string[]).includes(value);
-}
-
 export function isSortKey(value: string): value is SortKey {
     return (SORT_KEYS as readonly string[]).includes(value);
 }
 
-export function parseUrlState(search: string, hash: string): UrlState {
+export function parseUrlState(search: string, hash: string, items: FacetItems): UrlState {
     const state = createDefaultUrlState();
     const params = new URLSearchParams(search);
 
     state.query = params.get("q") ?? "";
-    state.providers = splitList(params.get("providers"));
-    state.families = splitList(params.get("families"));
-    state.caps = splitList(params.get("caps")).filter((cap) => cap === NONE_MARKER || isCapability(cap));
-    state.modIn = splitList(params.get("modIn"));
-    state.modOut = splitList(params.get("modOut"));
+    for (const key of FACET_KEYS) {
+        state[key] = decodeSelection(splitList(params.get(key)), items[key]);
+    }
 
     for (const key of RANGE_KEYS) {
         state.ranges[key].min = params.get(RANGE_PARAMS[key].min) ?? "";
@@ -102,11 +98,10 @@ export function buildUrl(state: UrlState, pathname: string): string {
     const params = new URLSearchParams();
 
     if (state.query) params.set("q", state.query);
-    setList(params, "providers", state.providers);
-    setList(params, "families", state.families);
-    setList(params, "caps", state.caps);
-    setList(params, "modIn", state.modIn);
-    setList(params, "modOut", state.modOut);
+    for (const key of FACET_KEYS) {
+        const tokens = encodeSelection(state[key]);
+        if (tokens.length > 0) params.set(key, [...tokens].sort().join(","));
+    }
 
     for (const key of RANGE_KEYS) {
         const range = state.ranges[key];
@@ -126,11 +121,6 @@ export function buildUrl(state: UrlState, pathname: string): string {
     const hash = state.page > 1 ? `#${state.page}` : "";
 
     return `${pathname}${search ? `?${search}` : ""}${hash}`;
-}
-
-function setList(params: URLSearchParams, key: string, values: string[]): void {
-    if (values.length === 0) return;
-    params.set(key, [...values].sort().join(","));
 }
 
 function splitList(value: string | null): string[] {

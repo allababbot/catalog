@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { filterRows, NONE_MARKER } from "../src/lib/filters";
+import { filterRows } from "../src/lib/filters";
 import { fmtCost, fmtNum } from "../src/lib/format";
 import { normalizeCatalog } from "../src/lib/normalizeCatalog";
+import { allSelection, noneSelection, someSelection } from "../src/lib/selection";
 import { sortRows } from "../src/lib/sorting";
-import type { ModelRow } from "../src/types/catalog";
+import type { FilterState, ModelRow } from "../src/types/catalog";
 
 const rows: ModelRow[] = [
     {
@@ -47,6 +48,24 @@ const rows: ModelRow[] = [
         costCacheRead: null,
     },
 ];
+
+function filterState(overrides: Partial<FilterState> = {}): FilterState {
+    return {
+        query: "",
+        providers: allSelection(),
+        families: allSelection(),
+        activeCaps: allSelection(),
+        activeModalitiesInput: allSelection(),
+        activeModalitiesOutput: allSelection(),
+        contextRange: {},
+        outputLimitRange: {},
+        costInputRange: {},
+        costOutputRange: {},
+        costCacheReadRange: {},
+        excludePlanProviders: false,
+        ...overrides,
+    };
+}
 
 describe("format helpers", () => {
     test("formats large token counts compactly", () => {
@@ -122,153 +141,67 @@ describe("catalog normalization", () => {
 
 describe("filterRows", () => {
     test("filters by query, provider, family, and active capabilities", () => {
-        const result = filterRows(rows, {
-            query: "llama",
-            providers: new Set(["Meta"]),
-            families: new Set(["llama"]),
-            activeCaps: new Set(["tool", "open"]),
-            activeModalitiesInput: new Set(),
-            activeModalitiesOutput: new Set(),
-            contextRange: {},
-            outputLimitRange: {},
-            costInputRange: {},
-            costOutputRange: {},
-            costCacheReadRange: {},
-            excludePlanProviders: false,
-        });
+        const result = filterRows(
+            rows,
+            filterState({
+                query: "llama",
+                providers: someSelection(["Meta"]),
+                families: someSelection(["llama"]),
+                activeCaps: someSelection(["tool", "open"]),
+            }),
+        );
 
         expect(result.map((row) => row.model)).toEqual(["Llama 4 Scout"]);
     });
 
     test("filters by multiple providers", () => {
-        const result = filterRows(rows, {
-            query: "",
-            providers: new Set(["OpenAI", "Meta"]),
-            families: new Set(),
-            activeCaps: new Set(),
-            activeModalitiesInput: new Set(),
-            activeModalitiesOutput: new Set(),
-            contextRange: {},
-            outputLimitRange: {},
-            costInputRange: {},
-            costOutputRange: {},
-            costCacheReadRange: {},
-            excludePlanProviders: false,
-        });
+        const result = filterRows(rows, filterState({ providers: someSelection(["OpenAI", "Meta"]) }));
 
         expect(result).toHaveLength(2);
     });
 
     test("filters by provider with no match", () => {
-        const result = filterRows(rows, {
-            query: "",
-            providers: new Set(["Google"]),
-            families: new Set(),
-            activeCaps: new Set(),
-            activeModalitiesInput: new Set(),
-            activeModalitiesOutput: new Set(),
-            contextRange: {},
-            outputLimitRange: {},
-            costInputRange: {},
-            costOutputRange: {},
-            costCacheReadRange: {},
-            excludePlanProviders: false,
-        });
+        const result = filterRows(rows, filterState({ providers: someSelection(["Google"]) }));
 
         expect(result).toHaveLength(0);
     });
 
-    test("returns all rows when filters are empty", () => {
-        expect(
-            filterRows(rows, {
-                query: "",
-                providers: new Set(),
-                families: new Set(),
-                activeCaps: new Set(),
-                activeModalitiesInput: new Set(),
-                activeModalitiesOutput: new Set(),
-                contextRange: {},
-                outputLimitRange: {},
-                costInputRange: {},
-                costOutputRange: {},
-                costCacheReadRange: {},
-                excludePlanProviders: false,
-            }),
-        ).toHaveLength(2);
+    test("returns all rows when every facet selects everything", () => {
+        expect(filterRows(rows, filterState())).toHaveLength(2);
     });
 
     test("filters by input modalities", () => {
-        const result = filterRows(rows, {
-            query: "",
-            providers: new Set(),
-            families: new Set(),
-            activeCaps: new Set(),
-            activeModalitiesInput: new Set(["image"]),
-            activeModalitiesOutput: new Set(),
-            contextRange: {},
-            outputLimitRange: {},
-            costInputRange: {},
-            costOutputRange: {},
-            costCacheReadRange: {},
-            excludePlanProviders: false,
-        });
+        const result = filterRows(rows, filterState({ activeModalitiesInput: someSelection(["image"]) }));
 
         expect(result.map((row) => row.model)).toEqual(["Llama 4 Scout"]);
     });
 
     test("filters by input and output modalities simultaneously", () => {
-        const result = filterRows(rows, {
-            query: "",
-            providers: new Set(),
-            families: new Set(),
-            activeCaps: new Set(),
-            activeModalitiesInput: new Set(["text"]),
-            activeModalitiesOutput: new Set(["text"]),
-            contextRange: {},
-            outputLimitRange: {},
-            costInputRange: {},
-            costOutputRange: {},
-            costCacheReadRange: {},
-            excludePlanProviders: false,
-        });
+        const result = filterRows(
+            rows,
+            filterState({
+                activeModalitiesInput: someSelection(["text"]),
+                activeModalitiesOutput: someSelection(["text"]),
+            }),
+        );
 
         expect(result.map((row) => row.model)).toEqual(["Llama 4 Scout"]);
     });
 
     test("filters by input modalities with no match", () => {
-        const result = filterRows(rows, {
-            query: "",
-            providers: new Set(),
-            families: new Set(),
-            activeCaps: new Set(),
-            activeModalitiesInput: new Set(["audio"]),
-            activeModalitiesOutput: new Set(),
-            contextRange: {},
-            outputLimitRange: {},
-            costInputRange: {},
-            costOutputRange: {},
-            costCacheReadRange: {},
-            excludePlanProviders: false,
-        });
+        const result = filterRows(rows, filterState({ activeModalitiesInput: someSelection(["audio"]) }));
 
         expect(result).toHaveLength(0);
     });
 
-    test("returns no rows when a dropdown is set to its empty selection", () => {
-        const result = filterRows(rows, {
-            query: "",
-            providers: new Set(),
-            families: new Set(),
-            activeCaps: new Set([NONE_MARKER]),
-            activeModalitiesInput: new Set(),
-            activeModalitiesOutput: new Set(),
-            contextRange: {},
-            outputLimitRange: {},
-            costInputRange: {},
-            costOutputRange: {},
-            costCacheReadRange: {},
-            excludePlanProviders: false,
-        });
+    test("returns no rows when a dropdown selects nothing", () => {
+        const result = filterRows(rows, filterState({ activeCaps: noneSelection() }));
+
+        expect(result).toHaveLength(0);
+    });
+
+    test("returns no rows when a modality dropdown selects nothing", () => {
+        const result = filterRows(rows, filterState({ activeModalitiesOutput: noneSelection() }));
 
         expect(result).toHaveLength(0);
     });

@@ -1,13 +1,14 @@
-import type { Capability, FilterRange, FilterState, ModelRow } from "../types/catalog";
+import { coversAll, selects } from "./selection";
+import type { FilterRange, FilterState, ModelRow } from "../types/catalog";
 
-export const NONE_MARKER = "__none__";
-
-const capabilityChecks: Record<Capability, (row: ModelRow) => boolean> = {
-    reasoning: (row) => row.reasoning,
-    tool: (row) => row.toolCall,
-    vision: (row) => row.attachment,
-    open: (row) => row.openWeights,
-};
+function capabilitiesOf(row: ModelRow): string[] {
+    const capabilities: string[] = [];
+    if (row.reasoning) capabilities.push("reasoning");
+    if (row.toolCall) capabilities.push("tool");
+    if (row.attachment) capabilities.push("vision");
+    if (row.openWeights) capabilities.push("open");
+    return capabilities;
+}
 
 function inRange(value: number | null, range: FilterRange): boolean {
     if (value === null) return false;
@@ -24,14 +25,8 @@ export function filterRows(rows: ModelRow[], filters: FilterState): ModelRow[] {
     const query = filters.query.trim().toLowerCase();
 
     return rows.filter((row) => {
-        if (filters.providers.size > 0) {
-            if (filters.providers.has(NONE_MARKER)) return false;
-            if (!filters.providers.has(row.provider)) return false;
-        }
-        if (filters.families.size > 0) {
-            if (filters.families.has(NONE_MARKER)) return false;
-            if (!filters.families.has(row.family)) return false;
-        }
+        if (!selects(filters.providers, row.provider)) return false;
+        if (!selects(filters.families, row.family)) return false;
 
         if (
             query &&
@@ -42,22 +37,9 @@ export function filterRows(rows: ModelRow[], filters: FilterState): ModelRow[] {
             return false;
         }
 
-        if (filters.activeCaps.size > 0) {
-            if (filters.activeCaps.has(NONE_MARKER)) return false;
-            for (const cap of filters.activeCaps) {
-                const check = capabilityChecks[cap as Capability];
-                if (!check || !check(row)) return false;
-            }
-        }
-
-        if (filters.activeModalitiesInput.size > 0) {
-            if (!Array.from(filters.activeModalitiesInput).every((m) => row.modalitiesInput.includes(m))) return false;
-        }
-
-        if (filters.activeModalitiesOutput.size > 0) {
-            if (!Array.from(filters.activeModalitiesOutput).every((m) => row.modalitiesOutput.includes(m)))
-                return false;
-        }
+        if (!coversAll(filters.activeCaps, capabilitiesOf(row))) return false;
+        if (!coversAll(filters.activeModalitiesInput, row.modalitiesInput)) return false;
+        if (!coversAll(filters.activeModalitiesOutput, row.modalitiesOutput)) return false;
 
         if (hasRange(filters.contextRange) && !inRange(row.context, filters.contextRange)) return false;
         if (hasRange(filters.outputLimitRange) && !inRange(row.outputLimit, filters.outputLimitRange)) return false;

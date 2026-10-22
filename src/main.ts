@@ -1,10 +1,13 @@
-import { filterRows, NONE_MARKER } from "./lib/filters";
+import { filterRows } from "./lib/filters";
 import { normalizeCatalog } from "./lib/normalizeCatalog";
 import { sortRows } from "./lib/sorting";
+import { allSelection, canonicalize, describeSelection, noneSelection, sameSelection, toggleValue } from "./lib/selection";
 import { buildUrl, DEFAULT_DIRECTION, DEFAULT_SORT, parseUrlState, RANGE_KEYS } from "./lib/urlState";
 import type { UrlState } from "./lib/urlState";
 import "./styles.css";
 import type { CatalogJson, ModelRow, SortKey } from "./types/catalog";
+import { FACET_KEYS } from "./types/selection";
+import type { FacetItems, FacetKey, Selection } from "./types/selection";
 import { renderStats } from "./ui/renderStats";
 import { renderTable } from "./ui/renderTable";
 
@@ -16,11 +19,14 @@ let currentPage = 1;
 let totalPages = 1;
 let sortKey: SortKey = DEFAULT_SORT;
 let sortDirection: 1 | -1 = DEFAULT_DIRECTION;
-const activeCaps = new Set<string>();
-const activeProviders = new Set<string>();
-const activeFamilies = new Set<string>();
-const activeModIn = new Set<string>();
-const activeModOut = new Set<string>();
+
+const selections: Record<FacetKey, Selection> = {
+    providers: allSelection(),
+    families: allSelection(),
+    caps: allSelection(),
+    modIn: allSelection(),
+    modOut: allSelection(),
+};
 
 const searchBox = query<HTMLInputElement>("#searchBox");
 const tbody = query<HTMLTableSectionElement>("#tbody");
@@ -103,10 +109,9 @@ async function boot(): Promise<void> {
         console.log("Total rows:", allRows.length);
 
         initTheme();
-        populateFilters(allRows);
+        populateFacets(allRows);
         setupDropdowns();
         loadFromURL();
-        updateDropdownFromURL();
         bindEvents();
         render();
     } catch (error) {
@@ -116,65 +121,65 @@ async function boot(): Promise<void> {
     }
 }
 
-// ── Dropdown builder ────────────────────────────────────────
+// ── Facets ────────────────────────────────────────────────
 
-interface DropdownContext {
-    container: HTMLElement;
+interface Facet {
+    key: FacetKey;
     items: string[];
-    selectedSet: Set<string>;
-    allCheckboxes: HTMLInputElement[];
-    selectAllCb: HTMLInputElement;
+    labels: Record<string, string>;
+    toggle: HTMLButtonElement;
+    selectAllBox: HTMLInputElement;
+    itemBoxes: HTMLInputElement[];
+    setSelection(selection: Selection): void;
 }
 
-const dropdownContexts: DropdownContext[] = [];
+let facets!: Record<FacetKey, Facet>;
 
-function buildDropdownMenu(
-    container: HTMLElement,
+function populateFacets(rows: ModelRow[]): void {
+    const providers = uniqueSorted(rows.map((row) => row.provider));
+    const families = uniqueSorted(rows.map((row) => row.family).filter(Boolean));
+    const caps = Object.keys(CAP_LABELS);
+    const modIn = uniqueSorted(rows.flatMap((row) => row.modalitiesInput));
+    const modOut = uniqueSorted(rows.flatMap((row) => row.modalitiesOutput));
+
+    facets = {
+        providers: createFacet("providers", providerToggle, providerMenu, providers),
+        families: createFacet("families", familyToggle, familyMenu, families),
+        caps: createFacet("caps", capToggle, capMenu, caps, CAP_LABELS),
+        modIn: createFacet("modIn", modInToggle, modInMenu, modIn),
+        modOut: createFacet("modOut", modOutToggle, modOutMenu, modOut),
+    };
+}
+
+function createFacet(
+    key: FacetKey,
+    toggle: HTMLButtonElement,
+    menu: HTMLElement,
     items: string[],
-    selectedSet: Set<string>,
-    onChange: () => void,
-    labels?: Record<string, string>,
-    onUpdateToggle?: (set: Set<string>, items: string[]) => void,
-): void {
-    container.innerHTML = "";
+    labels: Record<string, string> = {},
+): Facet {
+    const facet: Facet = {
+        key,
+        items,
+        labels,
+        toggle,
+        selectAllBox: document.createElement("input"),
+        itemBoxes: [],
+        setSelection: () => {},
+    };
 
-    const isAll = selectedSet.size === 0;
+    menu.innerHTML = "";
 
-    // Select All checkbox
     const selectAllLabel = document.createElement("label");
-    const selectAllCb = document.createElement("input");
-    selectAllCb.type = "checkbox";
-    selectAllCb.className = "select-all";
-    selectAllCb.checked = isAll;
-    selectAllLabel.appendChild(selectAllCb);
+    facet.selectAllBox.type = "checkbox";
+    facet.selectAllBox.className = "select-all";
+    selectAllLabel.appendChild(facet.selectAllBox);
     selectAllLabel.append(" Select All");
+    menu.appendChild(selectAllLabel);
 
-    selectAllCb.addEventListener("change", () => {
-        if (selectAllCb.checked) {
-            // Unchecked → Checked: back to ALL mode (no filter)
-            selectedSet.clear();
-            allCheckboxes.forEach((cb) => (cb.checked = true));
-            if (onUpdateToggle) onUpdateToggle(selectedSet, items);
-            onChange();
-        } else {
-            // Checked → Unchecked: deselect all → NONE mode
-            selectedSet.clear();
-            selectedSet.add(NONE_MARKER);
-            allCheckboxes.forEach((cb) => (cb.checked = false));
-            if (onUpdateToggle) onUpdateToggle(selectedSet, items);
-            onChange();
-        }
-    });
-
-    container.appendChild(selectAllLabel);
-
-    // Separator
     const sep = document.createElement("div");
     sep.className = "dropdown-sep";
-    container.appendChild(sep);
-
-    // Items
-    const allCheckboxes: HTMLInputElement[] = [];
+    menu.appendChild(sep);
 
     for (const item of items) {
         const label = document.createElement("label");
@@ -182,43 +187,59 @@ function buildDropdownMenu(
         cb.type = "checkbox";
         cb.className = "dropdown-item-cb";
         cb.value = item;
-        cb.checked = isAll || selectedSet.has(item);
-
-        cb.addEventListener("change", () => {
-            // Remove NONE_MARKER if present (user is interacting individually)
-            selectedSet.delete(NONE_MARKER);
-
-            if (cb.checked) {
-                selectedSet.add(item);
-            } else {
-                if (selectedSet.size === 0) {
-                    // Was in ALL mode, moving to SOME mode
-                    // Add all items except this one
-                    for (const i of items) {
-                        if (i !== item) selectedSet.add(i);
-                    }
-                } else {
-                    selectedSet.delete(item);
-                }
-                selectAllCb.checked = false;
-            }
-            if (onUpdateToggle) onUpdateToggle(selectedSet, items);
-            onChange();
-        });
-
         label.appendChild(cb);
-        label.append(` ${labels?.[item] ?? item}`);
-        container.appendChild(label);
-        allCheckboxes.push(cb);
+        label.append(` ${labels[item] ?? item}`);
+        menu.appendChild(label);
+        facet.itemBoxes.push(cb);
     }
 
-    // Blank spacer at bottom
     const blank = document.createElement("div");
     blank.className = "dropdown-blank";
-    container.appendChild(blank);
+    menu.appendChild(blank);
 
-    const context: DropdownContext = { container, items, selectedSet, allCheckboxes, selectAllCb };
-    dropdownContexts.push(context);
+    facet.setSelection = (selection: Selection) => {
+        const canonical = canonicalize(selection, facet.items);
+        selections[facet.key] = canonical;
+
+        for (const cb of facet.itemBoxes) {
+            cb.checked =
+                canonical.mode === "all" ? true : canonical.mode === "some" ? canonical.values.includes(cb.value) : false;
+        }
+        facet.selectAllBox.checked = canonical.mode === "all";
+        facet.toggle.textContent = facetLabel(canonical, facet.labels);
+    };
+
+    facet.selectAllBox.addEventListener("change", () => {
+        facet.setSelection(facet.selectAllBox.checked ? allSelection() : noneSelection());
+        resetPagination();
+    });
+
+    for (const cb of facet.itemBoxes) {
+        cb.addEventListener("change", () => {
+            facet.setSelection(toggleValue(selections[facet.key], cb.value, cb.checked, facet.items));
+            resetPagination();
+        });
+    }
+
+    facet.setSelection(allSelection());
+    return facet;
+}
+
+function facetLabel(selection: Selection, labels: Record<string, string>): string {
+    const description = describeSelection(selection);
+    if (description.kind === "all") return "all";
+    if (description.kind === "none") return "0 selected";
+    return description.values.map((value) => labels[value] ?? value).join(", ");
+}
+
+function facetItems(): FacetItems {
+    return {
+        providers: facets.providers.items,
+        families: facets.families.items,
+        caps: facets.caps.items,
+        modIn: facets.modIn.items,
+        modOut: facets.modOut.items,
+    };
 }
 
 // ── Dropdown open/close ─────────────────────────────────────
@@ -236,19 +257,7 @@ function setupDropdown(toggle: HTMLElement, menu: HTMLElement): void {
         e.stopPropagation();
         const willOpen = !menu.classList.contains("open");
         document.querySelectorAll(".dropdown-menu.open").forEach((m) => m.classList.remove("open"));
-        if (willOpen) {
-            const ctx = dropdownContexts.find((c) => c.container === menu);
-            // Initialize checkbox state if not already open
-            if (ctx) {
-                const isNone = ctx.selectedSet.has(NONE_MARKER);
-                const isAll = !isNone && ctx.selectedSet.size === 0;
-                ctx.selectAllCb.checked = isAll;
-                for (const cb of ctx.allCheckboxes) {
-                    cb.checked = isAll || ctx.selectedSet.has(cb.value);
-                }
-            }
-            menu.classList.add("open");
-        }
+        if (willOpen) menu.classList.add("open");
     });
     menu.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -258,71 +267,6 @@ function setupDropdown(toggle: HTMLElement, menu: HTMLElement): void {
 document.addEventListener("click", () => {
     document.querySelectorAll(".dropdown-menu.open").forEach((m) => m.classList.remove("open"));
 });
-
-// ── Toggle update functions ─────────────────────────────────
-
-function updateProviderToggle(set: Set<string>, items: string[]): void {
-    if (set.has(NONE_MARKER)) {
-        providerToggle.textContent = "0 selected";
-        return;
-    }
-    providerToggle.textContent = set.size === 0 || set.size === items.length ? "all" : [...set].join(", ");
-}
-
-function updateFamilyToggle(set: Set<string>, items: string[]): void {
-    if (set.has(NONE_MARKER)) {
-        familyToggle.textContent = "0 selected";
-        return;
-    }
-    familyToggle.textContent = set.size === 0 || set.size === items.length ? "all" : [...set].join(", ");
-}
-
-function updateCapToggle(set: Set<string>, items: string[]): void {
-    if (set.has(NONE_MARKER)) {
-        capToggle.textContent = "0 selected";
-        return;
-    }
-    if (set.size === 0 || set.size === items.length) {
-        capToggle.textContent = "all";
-        return;
-    }
-    capToggle.textContent = [...set].map((k) => CAP_LABELS[k] ?? k).join(", ");
-}
-
-function updateModInToggle(set: Set<string>, items: string[]): void {
-    if (set.has(NONE_MARKER)) {
-        modInToggle.textContent = "0 selected";
-        return;
-    }
-    modInToggle.textContent = set.size === 0 || set.size === items.length ? "all" : [...set].join(", ");
-}
-
-function updateModOutToggle(set: Set<string>, items: string[]): void {
-    if (set.has(NONE_MARKER)) {
-        modOutToggle.textContent = "0 selected";
-        return;
-    }
-    modOutToggle.textContent = set.size === 0 || set.size === items.length ? "all" : [...set].join(", ");
-}
-
-// ── Filter population ───────────────────────────────────────
-
-function populateFilters(rows: ModelRow[]): void {
-    const providers = uniqueSorted(rows.map((row) => row.provider));
-    const families = uniqueSorted(rows.map((row) => row.family).filter(Boolean));
-
-    buildDropdownMenu(providerMenu, providers, activeProviders, resetPagination, undefined, updateProviderToggle);
-    buildDropdownMenu(familyMenu, families, activeFamilies, resetPagination, undefined, updateFamilyToggle);
-
-    const capKeys = Object.keys(CAP_LABELS);
-    buildDropdownMenu(capMenu, capKeys, activeCaps, resetPagination, CAP_LABELS, updateCapToggle);
-
-    const modInValues = uniqueSorted(rows.flatMap((r) => r.modalitiesInput));
-    buildDropdownMenu(modInMenu, modInValues, activeModIn, resetPagination, undefined, updateModInToggle);
-
-    const modOutValues = uniqueSorted(rows.flatMap((r) => r.modalitiesOutput));
-    buildDropdownMenu(modOutMenu, modOutValues, activeModOut, resetPagination, undefined, updateModOutToggle);
-}
 
 // ── Event binding ───────────────────────────────────────────
 
@@ -345,20 +289,9 @@ function bindEvents(): void {
 
     window.addEventListener("popstate", () => {
         lastPushedState = null;
-        applyUrlState(parseUrlState(window.location.search, window.location.hash));
-        updateDropdownFromURL();
+        applyUrlState(parseUrlState(window.location.search, window.location.hash, facetItems()));
         replaceNextUrl = true;
         render();
-    });
-
-    // Dropdown checkbox change handlers
-    dropdownContexts.forEach((ctx) => {
-        ctx.allCheckboxes.forEach((cb) => {
-            cb.addEventListener("change", () => {
-                goToPage(1);
-                render();
-            });
-        });
     });
 
     pagePrev.addEventListener("click", () => {
@@ -377,24 +310,7 @@ function bindEvents(): void {
 
     clearBtn.addEventListener("click", () => {
         searchBox.value = "";
-        activeProviders.clear();
-        activeFamilies.clear();
-        activeCaps.clear();
-        activeModIn.clear();
-        activeModOut.clear();
-
-        for (const ctx of dropdownContexts) {
-            ctx.selectAllCb.checked = true;
-            for (const cb of ctx.allCheckboxes) {
-                cb.checked = true;
-            }
-        }
-
-        providerToggle.textContent = "all";
-        familyToggle.textContent = "all";
-        capToggle.textContent = "all";
-        modInToggle.textContent = "all";
-        modOutToggle.textContent = "all";
+        for (const key of FACET_KEYS) facets[key].setSelection(allSelection());
 
         Object.values(rangeInputs).forEach(({ min, max }) => {
             min.value = "";
@@ -509,11 +425,11 @@ function getRangeValue(input: HTMLInputElement): number | undefined {
 function captureUrlState(): UrlState {
     return {
         query: searchBox.value,
-        providers: [...activeProviders],
-        families: [...activeFamilies],
-        caps: [...activeCaps],
-        modIn: [...activeModIn],
-        modOut: [...activeModOut],
+        providers: selections.providers,
+        families: selections.families,
+        caps: selections.caps,
+        modIn: selections.modIn,
+        modOut: selections.modOut,
         ranges: {
             context: { min: rangeInputs.context.min.value, max: rangeInputs.context.max.value },
             outputLimit: { min: rangeInputs.outputLimit.min.value, max: rangeInputs.outputLimit.max.value },
@@ -556,32 +472,21 @@ function isRefinement(previous: UrlState, next: UrlState): boolean {
         previous.sort === next.sort &&
         previous.direction === next.direction &&
         previous.page === next.page &&
-        sameValues(previous.providers, next.providers) &&
-        sameValues(previous.families, next.families) &&
-        sameValues(previous.caps, next.caps) &&
-        sameValues(previous.modIn, next.modIn) &&
-        sameValues(previous.modOut, next.modOut)
+        sameSelection(previous.providers, next.providers) &&
+        sameSelection(previous.families, next.families) &&
+        sameSelection(previous.caps, next.caps) &&
+        sameSelection(previous.modIn, next.modIn) &&
+        sameSelection(previous.modOut, next.modOut)
     );
 }
 
-function sameValues(a: string[], b: string[]): boolean {
-    if (a.length !== b.length) return false;
-    const sortedA = [...a].sort();
-    const sortedB = [...b].sort();
-    return sortedA.every((value, index) => value === sortedB[index]);
-}
-
 function loadFromURL(): void {
-    applyUrlState(parseUrlState(window.location.search, window.location.hash));
+    applyUrlState(parseUrlState(window.location.search, window.location.hash, facetItems()));
 }
 
 function applyUrlState(state: UrlState): void {
     searchBox.value = state.query;
-    replaceSet(activeProviders, state.providers);
-    replaceSet(activeFamilies, state.families);
-    replaceSet(activeCaps, state.caps);
-    replaceSet(activeModIn, state.modIn);
-    replaceSet(activeModOut, state.modOut);
+    for (const key of FACET_KEYS) facets[key].setSelection(state[key]);
 
     for (const key of RANGE_KEYS) {
         rangeInputs[key].min.value = state.ranges[key].min;
@@ -594,46 +499,14 @@ function applyUrlState(state: UrlState): void {
     currentPage = state.page;
 }
 
-function replaceSet(target: Set<string>, values: string[]): void {
-    target.clear();
-    for (const value of values) target.add(value);
-}
-
-function updateDropdownFromURL(): void {
-    // Update checkboxes directly since they were loaded from URL
-    const loadDropdownState = (container: HTMLElement, selectedSet: Set<string>) => {
-        const ctx = dropdownContexts.find((c) => c.container === container);
-        if (!ctx) return;
-
-        const isNone = selectedSet.has(NONE_MARKER);
-        const isAll = !isNone && selectedSet.size === 0;
-
-        ctx.selectAllCb.checked = isAll;
-        for (const cb of ctx.allCheckboxes) {
-            cb.checked = isAll || selectedSet.has(cb.value);
-        }
-    };
-
-    loadDropdownState(providerMenu, activeProviders);
-    loadDropdownState(familyMenu, activeFamilies);
-    loadDropdownState(capMenu, activeCaps);
-    loadDropdownState(modInMenu, activeModIn);
-    loadDropdownState(modOutMenu, activeModOut);
-    updateProviderToggle(activeProviders, []);
-    updateFamilyToggle(activeFamilies, []);
-    updateCapToggle(activeCaps, []);
-    updateModInToggle(activeModIn, []);
-    updateModOutToggle(activeModOut, []);
-}
-
 function buildFilterState(): import("./types/catalog").FilterState {
     return {
         query: searchBox.value,
-        providers: new Set(Array.from(activeProviders)),
-        families: new Set(Array.from(activeFamilies)),
-        activeCaps: new Set(Array.from(activeCaps)),
-        activeModalitiesInput: new Set(Array.from(activeModIn)),
-        activeModalitiesOutput: new Set(Array.from(activeModOut)),
+        providers: selections.providers,
+        families: selections.families,
+        activeCaps: selections.caps,
+        activeModalitiesInput: selections.modIn,
+        activeModalitiesOutput: selections.modOut,
         contextRange: {
             min: getRangeValue(rangeInputs.context.min),
             max: getRangeValue(rangeInputs.context.max),
