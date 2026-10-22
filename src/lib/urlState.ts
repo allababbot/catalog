@@ -32,7 +32,8 @@ const RANGE_PARAMS: Record<RangeKey, { min: string; max: string }> = {
     costOutput: { min: "costOutputMin", max: "costOutputMax" },
 };
 
-export const DEFAULT_SORT: SortKey = "provider";
+export const DEFAULT_SORT: SortKey = "releaseDate";
+export const DEFAULT_DIRECTION: 1 | -1 = -1;
 
 export function createDefaultUrlState(): UrlState {
     return {
@@ -50,7 +51,7 @@ export function createDefaultUrlState(): UrlState {
         },
         excludePlan: false,
         sort: DEFAULT_SORT,
-        direction: 1,
+        direction: DEFAULT_DIRECTION,
         page: 1,
     };
 }
@@ -82,8 +83,14 @@ export function parseUrlState(search: string, hash: string): UrlState {
     state.excludePlan = params.get("excludePlan") === "true";
 
     const sort = params.get("sort");
-    if (sort !== null && isSortKey(sort)) state.sort = sort;
-    state.direction = params.get("dir") === "desc" ? -1 : 1;
+    const hasSort = sort !== null && isSortKey(sort);
+    if (hasSort) state.sort = sort;
+    if (params.has("dir")) {
+        state.direction = params.get("dir") === "asc" ? 1 : -1;
+    } else if (hasSort) {
+        // An explicit sort key without a direction keeps the historical ascending default.
+        state.direction = 1;
+    }
 
     const page = Number.parseInt(hash.replace(/^#/, ""), 10);
     if (Number.isInteger(page) && page > 0) state.page = page;
@@ -108,8 +115,12 @@ export function buildUrl(state: UrlState, pathname: string): string {
     }
 
     if (state.excludePlan) params.set("excludePlan", "true");
-    if (state.sort !== DEFAULT_SORT) params.set("sort", state.sort);
-    if (state.direction === -1) params.set("dir", "desc");
+    if (state.sort !== DEFAULT_SORT) {
+        params.set("sort", state.sort);
+        params.set("dir", state.direction === -1 ? "desc" : "asc");
+    } else if (state.direction !== DEFAULT_DIRECTION) {
+        params.set("dir", state.direction === -1 ? "desc" : "asc");
+    }
 
     const search = params.toString();
     const hash = state.page > 1 ? `#${state.page}` : "";

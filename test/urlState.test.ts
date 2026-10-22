@@ -7,6 +7,14 @@ describe("url state", () => {
         expect(parseUrlState("", "")).toEqual(createDefaultUrlState());
     });
 
+    test("defaults to the newest release date first", () => {
+        const state = parseUrlState("", "");
+
+        expect(state.sort).toBe("releaseDate");
+        expect(state.direction).toBe(-1);
+        expect(buildUrl(state, "/")).toBe("/");
+    });
+
     test("round-trips every part of the view state", () => {
         const state = createDefaultUrlState();
         state.query = "claude sonnet";
@@ -32,6 +40,23 @@ describe("url state", () => {
 
     test("omits default values and the first page from the URL", () => {
         expect(buildUrl(createDefaultUrlState(), "/")).toBe("/");
+    });
+
+    test("keeps ascending for an explicit sort key without a direction", () => {
+        const parsed = parseUrlState("?sort=provider", "");
+
+        expect(parsed.sort).toBe("provider");
+        expect(parsed.direction).toBe(1);
+    });
+
+    test("writes the direction alongside any non-default sort key", () => {
+        const state = createDefaultUrlState();
+        state.sort = "provider";
+
+        expect(buildUrl(state, "/")).toBe("/?sort=provider&dir=desc");
+
+        state.direction = 1;
+        expect(parseUrlState("?sort=provider&dir=asc", "")).toEqual(state);
     });
 
     test("sorts list values so the same selection produces the same URL", () => {
@@ -64,6 +89,6 @@ describe("url state", () => {
         const parsed = parseUrlState("?caps=reasoning,__bogus__&sort=__bogus__", "");
 
         expect(parsed.caps).toEqual(["reasoning"]);
-        expect(parsed.sort).toBe("provider");
+        expect(parsed.sort).toBe("releaseDate");
     });
 });
