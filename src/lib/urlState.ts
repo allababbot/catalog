@@ -1,12 +1,12 @@
 import { SORT_KEYS } from "../types/catalog";
 import type { SortKey } from "../types/catalog";
-import { allSelection, decodeSelection, encodeSelection } from "./selection";
-import { FACET_KEYS } from "../types/selection";
-import type { FacetItems, Selection } from "../types/selection";
-
-export const RANGE_KEYS = ["context", "outputLimit", "costInput", "costOutput"] as const;
-
-export type RangeKey = (typeof RANGE_KEYS)[number];
+import { decodeSelection, encodeSelection } from "./selection";
+import type { Selection } from "../types/selection";
+import { allSelections } from "./facets";
+import { FACET_KEYS } from "../types/facets";
+import type { FacetItems, FacetKey } from "../types/facets";
+import { RANGE_KEYS } from "../types/filter";
+import type { RangeKey } from "../types/filter";
 
 export interface UrlRange {
     min: string;
@@ -15,11 +15,7 @@ export interface UrlRange {
 
 export interface UrlState {
     query: string;
-    providers: Selection;
-    families: Selection;
-    caps: Selection;
-    modIn: Selection;
-    modOut: Selection;
+    selections: Record<FacetKey, Selection>;
     ranges: Record<RangeKey, UrlRange>;
     excludePlan: boolean;
     sort: SortKey;
@@ -40,11 +36,7 @@ export const DEFAULT_DIRECTION: 1 | -1 = -1;
 export function createDefaultUrlState(): UrlState {
     return {
         query: "",
-        providers: allSelection(),
-        families: allSelection(),
-        caps: allSelection(),
-        modIn: allSelection(),
-        modOut: allSelection(),
+        selections: allSelections(),
         ranges: {
             context: { min: "", max: "" },
             outputLimit: { min: "", max: "" },
@@ -68,7 +60,7 @@ export function parseUrlState(search: string, hash: string, items: FacetItems): 
 
     state.query = params.get("q") ?? "";
     for (const key of FACET_KEYS) {
-        state[key] = decodeSelection(splitList(params.get(key)), items[key]);
+        state.selections[key] = decodeSelection(splitList(params.get(key)), items[key]);
     }
 
     for (const key of RANGE_KEYS) {
@@ -99,7 +91,7 @@ export function buildUrl(state: UrlState, pathname: string): string {
 
     if (state.query) params.set("q", state.query);
     for (const key of FACET_KEYS) {
-        const tokens = encodeSelection(state[key]);
+        const tokens = encodeSelection(state.selections[key]);
         if (tokens.length > 0) params.set(key, [...tokens].sort().join(","));
     }
 

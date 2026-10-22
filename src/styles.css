@@ -229,6 +229,13 @@ a:hover {
     gap: 10px;
 }
 
+/* Holds the facet sections built from the registry; keeps the sidebar's 10px rhythm. */
+.facet-filters {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
 .filter-section {
     display: flex;
     flex-direction: column;

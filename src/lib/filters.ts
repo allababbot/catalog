@@ -1,14 +1,6 @@
-import { coversAll, selects } from "./selection";
-import type { FilterRange, FilterState, ModelRow } from "../types/catalog";
-
-function capabilitiesOf(row: ModelRow): string[] {
-    const capabilities: string[] = [];
-    if (row.reasoning) capabilities.push("reasoning");
-    if (row.toolCall) capabilities.push("tool");
-    if (row.attachment) capabilities.push("vision");
-    if (row.openWeights) capabilities.push("open");
-    return capabilities;
-}
+import { matchesFacets } from "./facets";
+import type { FilterRange, FilterState } from "../types/filter";
+import type { ModelRow } from "../types/catalog";
 
 function inRange(value: number | null, range: FilterRange): boolean {
     if (value === null) return false;
@@ -25,8 +17,7 @@ export function filterRows(rows: ModelRow[], filters: FilterState): ModelRow[] {
     const query = filters.query.trim().toLowerCase();
 
     return rows.filter((row) => {
-        if (!selects(filters.providers, row.provider)) return false;
-        if (!selects(filters.families, row.family)) return false;
+        if (!matchesFacets(row, filters.selections)) return false;
 
         if (
             query &&
@@ -37,14 +28,11 @@ export function filterRows(rows: ModelRow[], filters: FilterState): ModelRow[] {
             return false;
         }
 
-        if (!coversAll(filters.activeCaps, capabilitiesOf(row))) return false;
-        if (!coversAll(filters.activeModalitiesInput, row.modalitiesInput)) return false;
-        if (!coversAll(filters.activeModalitiesOutput, row.modalitiesOutput)) return false;
+        if (hasRange(filters.ranges.context) && !inRange(row.context, filters.ranges.context)) return false;
+        if (hasRange(filters.ranges.outputLimit) && !inRange(row.outputLimit, filters.ranges.outputLimit)) return false;
+        if (hasRange(filters.ranges.costInput) && !inRange(row.costInput, filters.ranges.costInput)) return false;
+        if (hasRange(filters.ranges.costOutput) && !inRange(row.costOutput, filters.ranges.costOutput)) return false;
 
-        if (hasRange(filters.contextRange) && !inRange(row.context, filters.contextRange)) return false;
-        if (hasRange(filters.outputLimitRange) && !inRange(row.outputLimit, filters.outputLimitRange)) return false;
-        if (hasRange(filters.costInputRange) && !inRange(row.costInput, filters.costInputRange)) return false;
-        if (hasRange(filters.costOutputRange) && !inRange(row.costOutput, filters.costOutputRange)) return false;
         if (filters.excludePlanProviders) {
             const normalizedProvider = row.provider.toLowerCase();
             if (

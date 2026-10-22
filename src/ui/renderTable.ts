@@ -1,3 +1,4 @@
+import { escapeHtml } from "../lib/escapeHtml";
 import { fmtCost, fmtNum } from "../lib/format";
 import type { ModelRow } from "../types/catalog";
 import { renderCapabilityChips } from "./renderChips";
@@ -32,17 +33,4 @@ export function renderTable(tbody: HTMLTableSectionElement, rows: ModelRow[]): v
     }
 
     tbody.appendChild(fragment);
-}
-
-function escapeHtml(value: string): string {
-    return value.replace(/[&<>"']/g, (char) => {
-        const entities: Record<string, string> = {
-            "&": "&amp;",
-            "<": "&lt;",
-            ">": "&gt;",
-            '"': "&quot;",
-            "'": "&#039;",
-        };
-        return entities[char];
-    });
 }

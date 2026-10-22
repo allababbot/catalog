@@ -58,11 +58,11 @@ export function toggleValue(selection: Selection, value: string, checked: boolea
     return canonicalize(someSelection(kept), items);
 }
 
-/** True when the selection admits the given value. */
-export function selects(selection: Selection, value: string): boolean {
+/** True when the selection admits at least one of the given values. */
+export function selectsAny(selection: Selection, values: string[]): boolean {
     if (selection.mode === "all") return true;
     if (selection.mode === "none") return false;
-    return selection.values.includes(value);
+    return values.some((value) => selection.values.includes(value));
 }
 
 /** True when the given values cover every selected value. */

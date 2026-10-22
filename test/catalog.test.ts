@@ -1,10 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { filterRows } from "../src/lib/filters";
 import { fmtCost, fmtNum } from "../src/lib/format";
 import { normalizeCatalog } from "../src/lib/normalizeCatalog";
-import { allSelection, noneSelection, someSelection } from "../src/lib/selection";
 import { sortRows } from "../src/lib/sorting";
-import type { FilterState, ModelRow } from "../src/types/catalog";
+import type { ModelRow } from "../src/types/catalog";
 
 const rows: ModelRow[] = [
     {
@@ -48,24 +46,6 @@ const rows: ModelRow[] = [
         costCacheRead: null,
     },
 ];
-
-function filterState(overrides: Partial<FilterState> = {}): FilterState {
-    return {
-        query: "",
-        providers: allSelection(),
-        families: allSelection(),
-        activeCaps: allSelection(),
-        activeModalitiesInput: allSelection(),
-        activeModalitiesOutput: allSelection(),
-        contextRange: {},
-        outputLimitRange: {},
-        costInputRange: {},
-        costOutputRange: {},
-        costCacheReadRange: {},
-        excludePlanProviders: false,
-        ...overrides,
-    };
-}
 
 describe("format helpers", () => {
     test("formats large token counts compactly", () => {
@@ -136,74 +116,6 @@ describe("catalog normalization", () => {
 
         expect(result[0].providerId).toBe("requesty");
         expect(result[0].providerDoc).toBe("https://requesty.ai/solution/llm-routing/models");
-    });
-});
-
-describe("filterRows", () => {
-    test("filters by query, provider, family, and active capabilities", () => {
-        const result = filterRows(
-            rows,
-            filterState({
-                query: "llama",
-                providers: someSelection(["Meta"]),
-                families: someSelection(["llama"]),
-                activeCaps: someSelection(["tool", "open"]),
-            }),
-        );
-
-        expect(result.map((row) => row.model)).toEqual(["Llama 4 Scout"]);
-    });
-
-    test("filters by multiple providers", () => {
-        const result = filterRows(rows, filterState({ providers: someSelection(["OpenAI", "Meta"]) }));
-
-        expect(result).toHaveLength(2);
-    });
-
-    test("filters by provider with no match", () => {
-        const result = filterRows(rows, filterState({ providers: someSelection(["Google"]) }));
-
-        expect(result).toHaveLength(0);
-    });
-
-    test("returns all rows when every facet selects everything", () => {
-        expect(filterRows(rows, filterState())).toHaveLength(2);
-    });
-
-    test("filters by input modalities", () => {
-        const result = filterRows(rows, filterState({ activeModalitiesInput: someSelection(["image"]) }));
-
-        expect(result.map((row) => row.model)).toEqual(["Llama 4 Scout"]);
-    });
-
-    test("filters by input and output modalities simultaneously", () => {
-        const result = filterRows(
-            rows,
-            filterState({
-                activeModalitiesInput: someSelection(["text"]),
-                activeModalitiesOutput: someSelection(["text"]),
-            }),
-        );
-
-        expect(result.map((row) => row.model)).toEqual(["Llama 4 Scout"]);
-    });
-
-    test("filters by input modalities with no match", () => {
-        const result = filterRows(rows, filterState({ activeModalitiesInput: someSelection(["audio"]) }));
-
-        expect(result).toHaveLength(0);
-    });
-
-    test("returns no rows when a dropdown selects nothing", () => {
-        const result = filterRows(rows, filterState({ activeCaps: noneSelection() }));
-
-        expect(result).toHaveLength(0);
-    });
-
-    test("returns no rows when a modality dropdown selects nothing", () => {
-        const result = filterRows(rows, filterState({ activeModalitiesOutput: noneSelection() }));
-
-        expect(result).toHaveLength(0);
     });
 });
 

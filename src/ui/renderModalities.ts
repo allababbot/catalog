@@ -1,3 +1,5 @@
+import { escapeHtml } from "../lib/escapeHtml";
+
 const MODALITY_ICONS: Record<string, string> = {
     text: `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="4" y1="6" x2="16" y2="6"/><line x1="4" y1="10" x2="13" y2="10"/><line x1="4" y1="14" x2="10" y2="14"/></svg>`,
     image: `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="14" height="12" rx="1"/><circle cx="7" cy="8" r="1.5"/><path d="m3 16 4-4 2 2 3-3 5 5"/></svg>`,
@@ -30,17 +32,4 @@ export function renderModalityOutputChips(modalitiesOutput: string[]): string {
     );
 
     return `<div class="mods">${chips.join("")}</div>`;
-}
-
-function escapeHtml(value: string): string {
-    return value.replace(/[&<>"']/g, (char) => {
-        const entities: Record<string, string> = {
-            "&": "&amp;",
-            "<": "&lt;",
-            ">": "&gt;",
-            '"': "&quot;",
-            "'": "&#039;",
-        };
-        return entities[char];
-    });
 }

@@ -1,14 +1,3 @@
-import type { Selection } from "./selection";
-
-export interface FilterRange {
-    min?: number;
-    max?: number;
-}
-
-export const CAPABILITIES = ["reasoning", "tool", "vision", "open"] as const;
-
-export type Capability = (typeof CAPABILITIES)[number];
-
 export const SORT_KEYS = [
     "provider",
     "model",
@@ -77,19 +66,4 @@ export interface ModelRow {
     costInput: number | null;
     costOutput: number | null;
     costCacheRead: number | null;
-}
-
-export interface FilterState {
-    query: string;
-    providers: Selection;
-    families: Selection;
-    activeCaps: Selection;
-    activeModalitiesInput: Selection;
-    activeModalitiesOutput: Selection;
-    contextRange: FilterRange;
-    outputLimitRange: FilterRange;
-    costInputRange: FilterRange;
-    costOutputRange: FilterRange;
-    costCacheReadRange: FilterRange;
-    excludePlanProviders: boolean;
 }

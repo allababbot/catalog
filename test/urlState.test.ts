@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { allSelection, NONE_TOKEN, noneSelection, someSelection } from "../src/lib/selection";
 import { buildUrl, createDefaultUrlState, parseUrlState } from "../src/lib/urlState";
-import type { FacetItems } from "../src/types/selection";
+import type { FacetItems } from "../src/types/facets";
 
 const ITEMS: FacetItems = {
     providers: ["Anthropic", "Meta", "OpenAI"],
@@ -9,6 +9,7 @@ const ITEMS: FacetItems = {
     caps: ["open", "reasoning", "tool", "vision"],
     modIn: ["audio", "image", "text"],
     modOut: ["image", "text"],
+    releaseYear: ["2023", "2024", "2025"],
 };
 
 describe("url state", () => {
@@ -27,11 +28,11 @@ describe("url state", () => {
     test("round-trips every part of the view state", () => {
         const state = createDefaultUrlState();
         state.query = "claude sonnet";
-        state.providers = someSelection(["Anthropic", "OpenAI"]);
-        state.families = someSelection(["claude-sonnet"]);
-        state.caps = someSelection(["reasoning", "vision"]);
-        state.modIn = someSelection(["image", "text"]);
-        state.modOut = someSelection(["text"]);
+        state.selections.providers = someSelection(["Anthropic", "OpenAI"]);
+        state.selections.families = someSelection(["claude-sonnet"]);
+        state.selections.caps = someSelection(["reasoning", "vision"]);
+        state.selections.modIn = someSelection(["image", "text"]);
+        state.selections.modOut = someSelection(["text"]);
         state.ranges.context = { min: "100000", max: "200000" };
         state.ranges.costOutput = { min: "0.5", max: "" };
         state.excludePlan = true;
@@ -70,9 +71,9 @@ describe("url state", () => {
 
     test("sorts list values so the same selection produces the same URL", () => {
         const first = createDefaultUrlState();
-        first.providers = someSelection(["OpenAI", "Anthropic"]);
+        first.selections.providers = someSelection(["OpenAI", "Anthropic"]);
         const second = createDefaultUrlState();
-        second.providers = someSelection(["Anthropic", "OpenAI"]);
+        second.selections.providers = someSelection(["Anthropic", "OpenAI"]);
 
         expect(buildUrl(first, "/")).toBe(buildUrl(second, "/"));
     });
@@ -84,39 +85,56 @@ describe("url state", () => {
 
     test("keeps the none mode of every dropdown", () => {
         const state = createDefaultUrlState();
-        state.caps = noneSelection();
-        state.providers = noneSelection();
+        state.selections.caps = noneSelection();
+        state.selections.providers = noneSelection();
 
         const url = buildUrl(state, "/");
         const parsed = parseUrlState(url.slice(url.indexOf("?")), "", ITEMS);
 
-        expect(parsed.caps).toEqual(noneSelection());
-        expect(parsed.providers).toEqual(noneSelection());
+        expect(parsed.selections.caps).toEqual(noneSelection());
+        expect(parsed.selections.providers).toEqual(noneSelection());
         expect(url).toContain(`providers=${NONE_TOKEN}`);
     });
 
     test("ignores unknown caps and sort keys instead of trusting the URL", () => {
         const parsed = parseUrlState("?caps=reasoning,__bogus__&sort=__bogus__", "", ITEMS);
 
-        expect(parsed.caps).toEqual(someSelection(["reasoning"]));
+        expect(parsed.selections.caps).toEqual(someSelection(["reasoning"]));
         expect(parsed.sort).toBe("releaseDate");
     });
 
     test("drops values the facet does not offer", () => {
         const parsed = parseUrlState("?providers=typo", "", ITEMS);
 
-        expect(parsed.providers).toEqual(noneSelection());
+        expect(parsed.selections.providers).toEqual(noneSelection());
     });
 
     test("keeps a strict subset of the offered values as a selection", () => {
         const parsed = parseUrlState("?providers=Anthropic", "", ITEMS);
 
-        expect(parsed.providers).toEqual(someSelection(["Anthropic"]));
+        expect(parsed.selections.providers).toEqual(someSelection(["Anthropic"]));
     });
 
     test("collapses a list that covers every offered value into all", () => {
         const parsed = parseUrlState("?providers=Anthropic,Meta,OpenAI", "", ITEMS);
 
-        expect(parsed.providers).toEqual(allSelection());
+        expect(parsed.selections.providers).toEqual(allSelection());
+    });
+
+    test("carries every facet through the URL", () => {
+        const state = createDefaultUrlState();
+        state.selections.families = someSelection(["llama"]);
+        state.selections.modIn = someSelection(["image"]);
+        state.selections.modOut = someSelection(["text"]);
+        state.selections.releaseYear = someSelection(["2025"]);
+
+        const url = buildUrl(state, "/");
+        expect(url).toContain("families=llama");
+        expect(url).toContain("modIn=image");
+        expect(url).toContain("modOut=text");
+        expect(url).toContain("releaseYear=2025");
+
+        const parsed = parseUrlState(url.slice(url.indexOf("?")), "", ITEMS);
+        expect(parsed.selections).toEqual(state.selections);
     });
 });

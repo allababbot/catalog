@@ -1,13 +1,17 @@
 import { filterRows } from "./lib/filters";
+import { allSelections, facetCaption, facetItems } from "./lib/facets";
 import { normalizeCatalog } from "./lib/normalizeCatalog";
 import { sortRows } from "./lib/sorting";
-import { allSelection, canonicalize, describeSelection, noneSelection, sameSelection, toggleValue } from "./lib/selection";
-import { buildUrl, DEFAULT_DIRECTION, DEFAULT_SORT, parseUrlState, RANGE_KEYS } from "./lib/urlState";
+import { allSelection, canonicalize, noneSelection, sameSelection, toggleValue } from "./lib/selection";
+import { buildUrl, DEFAULT_DIRECTION, DEFAULT_SORT, parseUrlState } from "./lib/urlState";
 import type { UrlState } from "./lib/urlState";
 import "./styles.css";
 import type { CatalogJson, ModelRow, SortKey } from "./types/catalog";
-import { FACET_KEYS } from "./types/selection";
-import type { FacetItems, FacetKey, Selection } from "./types/selection";
+import { FACETS, FACET_KEYS } from "./types/facets";
+import type { FacetEntry, FacetKey } from "./types/facets";
+import { RANGE_KEYS } from "./types/filter";
+import type { FilterState } from "./types/filter";
+import type { Selection } from "./types/selection";
 import { renderStats } from "./ui/renderStats";
 import { renderTable } from "./ui/renderTable";
 
@@ -20,13 +24,7 @@ let totalPages = 1;
 let sortKey: SortKey = DEFAULT_SORT;
 let sortDirection: 1 | -1 = DEFAULT_DIRECTION;
 
-const selections: Record<FacetKey, Selection> = {
-    providers: allSelection(),
-    families: allSelection(),
-    caps: allSelection(),
-    modIn: allSelection(),
-    modOut: allSelection(),
-};
+const selections: Record<FacetKey, Selection> = allSelections();
 
 const searchBox = query<HTMLInputElement>("#searchBox");
 const tbody = query<HTMLTableSectionElement>("#tbody");
@@ -40,17 +38,7 @@ const excludePlanCheckbox = query<HTMLInputElement>("#excludePlan");
 const pagePrev = query<HTMLButtonElement>("#pagePrev");
 const pageNext = query<HTMLButtonElement>("#pageNext");
 const pageNumbers = query<HTMLElement>("#pageNumbers");
-
-const providerToggle = query<HTMLButtonElement>("#providerToggle");
-const providerMenu = query<HTMLElement>("#providerMenu");
-const familyToggle = query<HTMLButtonElement>("#familyToggle");
-const familyMenu = query<HTMLElement>("#familyMenu");
-const capToggle = query<HTMLButtonElement>("#capToggle");
-const capMenu = query<HTMLElement>("#capMenu");
-const modInToggle = query<HTMLButtonElement>("#modInToggle");
-const modInMenu = query<HTMLElement>("#modInMenu");
-const modOutToggle = query<HTMLButtonElement>("#modOutToggle");
-const modOutMenu = query<HTMLElement>("#modOutMenu");
+const facetContainer = query<HTMLElement>("#facetFilters");
 
 const rangeInputs = {
     context: { min: query<HTMLInputElement>("#contextMin"), max: query<HTMLInputElement>("#contextMax") },
@@ -58,13 +46,6 @@ const rangeInputs = {
     costInput: { min: query<HTMLInputElement>("#costInputMin"), max: query<HTMLInputElement>("#costInputMax") },
     costOutput: { min: query<HTMLInputElement>("#costOutputMin"), max: query<HTMLInputElement>("#costOutputMax") },
 } as const;
-
-const CAP_LABELS: Record<string, string> = {
-    reasoning: "Reasoning",
-    tool: "Tool Call",
-    vision: "Vision",
-    open: "Open Weights",
-};
 
 void boot();
 
@@ -123,57 +104,60 @@ async function boot(): Promise<void> {
 
 // ── Facets ────────────────────────────────────────────────
 
-interface Facet {
-    key: FacetKey;
+interface FacetControl {
+    definition: FacetEntry;
     items: string[];
-    labels: Record<string, string>;
+    section: HTMLElement;
     toggle: HTMLButtonElement;
+    menu: HTMLElement;
     selectAllBox: HTMLInputElement;
     itemBoxes: HTMLInputElement[];
     setSelection(selection: Selection): void;
 }
 
-let facets!: Record<FacetKey, Facet>;
+let facets!: Record<FacetKey, FacetControl>;
 
+/** Builds the sidebar: one section per facet, in the order of the registry. */
 function populateFacets(rows: ModelRow[]): void {
-    const providers = uniqueSorted(rows.map((row) => row.provider));
-    const families = uniqueSorted(rows.map((row) => row.family).filter(Boolean));
-    const caps = Object.keys(CAP_LABELS);
-    const modIn = uniqueSorted(rows.flatMap((row) => row.modalitiesInput));
-    const modOut = uniqueSorted(rows.flatMap((row) => row.modalitiesOutput));
+    const controls = FACETS.map((definition) => {
+        const control = createFacetControl(definition, definition.items(rows));
+        facetContainer.appendChild(control.section);
+        return [definition.key, control] as const;
+    });
 
-    facets = {
-        providers: createFacet("providers", providerToggle, providerMenu, providers),
-        families: createFacet("families", familyToggle, familyMenu, families),
-        caps: createFacet("caps", capToggle, capMenu, caps, CAP_LABELS),
-        modIn: createFacet("modIn", modInToggle, modInMenu, modIn),
-        modOut: createFacet("modOut", modOutToggle, modOutMenu, modOut),
-    };
+    facets = Object.fromEntries(controls) as Record<FacetKey, FacetControl>;
 }
 
-function createFacet(
-    key: FacetKey,
-    toggle: HTMLButtonElement,
-    menu: HTMLElement,
-    items: string[],
-    labels: Record<string, string> = {},
-): Facet {
-    const facet: Facet = {
-        key,
-        items,
-        labels,
-        toggle,
-        selectAllBox: document.createElement("input"),
-        itemBoxes: [],
-        setSelection: () => {},
-    };
+function createFacetControl(definition: FacetEntry, items: string[]): FacetControl {
+    const section = document.createElement("div");
+    section.className = "filter-section";
 
-    menu.innerHTML = "";
+    const label = document.createElement("label");
+    label.className = "filter-label";
+    label.textContent = definition.label;
+
+    const dropdown = document.createElement("div");
+    dropdown.className = "dropdown-filter";
+
+    const toggle = document.createElement("button");
+    toggle.className = "dropdown-toggle";
+    toggle.id = `${definition.key}Toggle`;
+    toggle.type = "button";
+    toggle.textContent = "all";
+
+    const menu = document.createElement("div");
+    menu.className = "dropdown-menu";
+    menu.id = `${definition.key}Menu`;
+
+    dropdown.append(toggle, menu);
+    section.append(label, dropdown);
+
+    const selectAllBox = document.createElement("input");
+    selectAllBox.type = "checkbox";
+    selectAllBox.className = "select-all";
 
     const selectAllLabel = document.createElement("label");
-    facet.selectAllBox.type = "checkbox";
-    facet.selectAllBox.className = "select-all";
-    selectAllLabel.appendChild(facet.selectAllBox);
+    selectAllLabel.appendChild(selectAllBox);
     selectAllLabel.append(" Select All");
     menu.appendChild(selectAllLabel);
 
@@ -181,76 +165,69 @@ function createFacet(
     sep.className = "dropdown-sep";
     menu.appendChild(sep);
 
+    const itemBoxes: HTMLInputElement[] = [];
     for (const item of items) {
-        const label = document.createElement("label");
+        const itemLabel = document.createElement("label");
         const cb = document.createElement("input");
         cb.type = "checkbox";
         cb.className = "dropdown-item-cb";
         cb.value = item;
-        label.appendChild(cb);
-        label.append(` ${labels[item] ?? item}`);
-        menu.appendChild(label);
-        facet.itemBoxes.push(cb);
+        itemLabel.appendChild(cb);
+        itemLabel.append(` ${definition.itemLabels[item] ?? item}`);
+        menu.appendChild(itemLabel);
+        itemBoxes.push(cb);
     }
 
     const blank = document.createElement("div");
     blank.className = "dropdown-blank";
     menu.appendChild(blank);
 
-    facet.setSelection = (selection: Selection) => {
-        const canonical = canonicalize(selection, facet.items);
-        selections[facet.key] = canonical;
+    const control: FacetControl = {
+        definition,
+        items,
+        section,
+        toggle,
+        menu,
+        selectAllBox,
+        itemBoxes,
+        setSelection: () => {},
+    };
 
-        for (const cb of facet.itemBoxes) {
+    control.setSelection = (selection: Selection) => {
+        const canonical = canonicalize(selection, control.items);
+        selections[definition.key] = canonical;
+
+        for (const cb of control.itemBoxes) {
             cb.checked =
                 canonical.mode === "all" ? true : canonical.mode === "some" ? canonical.values.includes(cb.value) : false;
         }
-        facet.selectAllBox.checked = canonical.mode === "all";
-        facet.selectAllBox.indeterminate = canonical.mode === "some";
-        facet.toggle.textContent = facetLabel(canonical, facet.labels);
+        control.selectAllBox.checked = canonical.mode === "all";
+        control.selectAllBox.indeterminate = canonical.mode === "some";
+        control.toggle.textContent = facetCaption(definition, canonical);
     };
 
-    facet.selectAllBox.addEventListener("change", () => {
-        facet.setSelection(facet.selectAllBox.checked ? allSelection() : noneSelection());
+    control.selectAllBox.addEventListener("change", () => {
+        control.setSelection(control.selectAllBox.checked ? allSelection() : noneSelection());
         resetPagination();
     });
 
-    for (const cb of facet.itemBoxes) {
+    for (const cb of control.itemBoxes) {
         cb.addEventListener("change", () => {
-            facet.setSelection(toggleValue(selections[facet.key], cb.value, cb.checked, facet.items));
+            control.setSelection(toggleValue(selections[definition.key], cb.value, cb.checked, control.items));
             resetPagination();
         });
     }
 
-    facet.setSelection(allSelection());
-    return facet;
-}
-
-function facetLabel(selection: Selection, labels: Record<string, string>): string {
-    const description = describeSelection(selection);
-    if (description.kind === "all") return "all";
-    if (description.kind === "none") return "0 selected";
-    return description.values.map((value) => labels[value] ?? value).join(", ");
-}
-
-function facetItems(): FacetItems {
-    return {
-        providers: facets.providers.items,
-        families: facets.families.items,
-        caps: facets.caps.items,
-        modIn: facets.modIn.items,
-        modOut: facets.modOut.items,
-    };
+    control.setSelection(allSelection());
+    return control;
 }
 
 // ── Dropdown open/close ─────────────────────────────────────
 
 function setupDropdowns(): void {
-    setupDropdown(providerToggle, providerMenu);
-    setupDropdown(familyToggle, familyMenu);
-    setupDropdown(capToggle, capMenu);
-    setupDropdown(modInToggle, modInMenu);
-    setupDropdown(modOutToggle, modOutMenu);
+    for (const key of FACET_KEYS) {
+        setupDropdown(facets[key].toggle, facets[key].menu);
+    }
 }
 
 function setupDropdown(toggle: HTMLElement, menu: HTMLElement): void {
@@ -290,7 +267,7 @@ function bindEvents(): void {
 
     window.addEventListener("popstate", () => {
         lastPushedState = null;
-        applyUrlState(parseUrlState(window.location.search, window.location.hash, facetItems()));
+        applyUrlState(parseUrlState(window.location.search, window.location.hash, facetItems(allRows)));
         replaceNextUrl = true;
         render();
     });
@@ -426,11 +403,7 @@ function getRangeValue(input: HTMLInputElement): number | undefined {
 function captureUrlState(): UrlState {
     return {
         query: searchBox.value,
-        providers: selections.providers,
-        families: selections.families,
-        caps: selections.caps,
-        modIn: selections.modIn,
-        modOut: selections.modOut,
+        selections: { ...selections },
         ranges: {
             context: { min: rangeInputs.context.min.value, max: rangeInputs.context.max.value },
             outputLimit: { min: rangeInputs.outputLimit.min.value, max: rangeInputs.outputLimit.max.value },
@@ -473,21 +446,17 @@ function isRefinement(previous: UrlState, next: UrlState): boolean {
         previous.sort === next.sort &&
         previous.direction === next.direction &&
         previous.page === next.page &&
-        sameSelection(previous.providers, next.providers) &&
-        sameSelection(previous.families, next.families) &&
-        sameSelection(previous.caps, next.caps) &&
-        sameSelection(previous.modIn, next.modIn) &&
-        sameSelection(previous.modOut, next.modOut)
+        FACET_KEYS.every((key) => sameSelection(previous.selections[key], next.selections[key]))
     );
 }
 
 function loadFromURL(): void {
-    applyUrlState(parseUrlState(window.location.search, window.location.hash, facetItems()));
+    applyUrlState(parseUrlState(window.location.search, window.location.hash, facetItems(allRows)));
 }
 
 function applyUrlState(state: UrlState): void {
     searchBox.value = state.query;
-    for (const key of FACET_KEYS) facets[key].setSelection(state[key]);
+    for (const key of FACET_KEYS) facets[key].setSelection(state.selections[key]);
 
     for (const key of RANGE_KEYS) {
         rangeInputs[key].min.value = state.ranges[key].min;
@@ -500,37 +469,30 @@ function applyUrlState(state: UrlState): void {
     currentPage = state.page;
 }
 
-function buildFilterState(): import("./types/catalog").FilterState {
+function buildFilterState(): FilterState {
     return {
         query: searchBox.value,
-        providers: selections.providers,
-        families: selections.families,
-        activeCaps: selections.caps,
-        activeModalitiesInput: selections.modIn,
-        activeModalitiesOutput: selections.modOut,
-        contextRange: {
-            min: getRangeValue(rangeInputs.context.min),
-            max: getRangeValue(rangeInputs.context.max),
+        selections: { ...selections },
+        ranges: {
+            context: {
+                min: getRangeValue(rangeInputs.context.min),
+                max: getRangeValue(rangeInputs.context.max),
+            },
+            outputLimit: {
+                min: getRangeValue(rangeInputs.outputLimit.min),
+                max: getRangeValue(rangeInputs.outputLimit.max),
+            },
+            costInput: {
+                min: getRangeValue(rangeInputs.costInput.min),
+                max: getRangeValue(rangeInputs.costInput.max),
+            },
+            costOutput: {
+                min: getRangeValue(rangeInputs.costOutput.min),
+                max: getRangeValue(rangeInputs.costOutput.max),
+            },
         },
-        outputLimitRange: {
-            min: getRangeValue(rangeInputs.outputLimit.min),
-            max: getRangeValue(rangeInputs.outputLimit.max),
-        },
-        costInputRange: {
-            min: getRangeValue(rangeInputs.costInput.min),
-            max: getRangeValue(rangeInputs.costInput.max),
-        },
-        costOutputRange: {
-            min: getRangeValue(rangeInputs.costOutput.min),
-            max: getRangeValue(rangeInputs.costOutput.max),
-        },
-        costCacheReadRange: {},
         excludePlanProviders: excludePlanCheckbox.checked,
     };
-}
-
-function uniqueSorted(values: string[]): string[] {
-    return [...new Set(values)].sort((a, b) => a.localeCompare(b));
 }
 
 function query<T extends Element>(selector: string): T {

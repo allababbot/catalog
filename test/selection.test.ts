@@ -9,7 +9,7 @@ import {
     NONE_TOKEN,
     noneSelection,
     sameSelection,
-    selects,
+    selectsAny,
     someSelection,
     toggleValue,
 } from "../src/lib/selection";
@@ -74,11 +74,16 @@ describe("toggleValue", () => {
 });
 
 describe("matchers", () => {
-    test("selects admits every value in all mode and none in none mode", () => {
-        expect(selects(allSelection(), "alpha")).toBe(true);
-        expect(selects(noneSelection(), "alpha")).toBe(false);
-        expect(selects(someSelection(["alpha"]), "alpha")).toBe(true);
-        expect(selects(someSelection(["alpha"]), "beta")).toBe(false);
+    test("selectsAny admits every value in all mode and none in none mode", () => {
+        expect(selectsAny(allSelection(), ["alpha"])).toBe(true);
+        expect(selectsAny(noneSelection(), ["alpha"])).toBe(false);
+        expect(selectsAny(someSelection(["alpha"]), ["alpha"])).toBe(true);
+        expect(selectsAny(someSelection(["alpha"]), ["beta"])).toBe(false);
+    });
+
+    test("selectsAny admits a value the row carries out of many", () => {
+        expect(selectsAny(someSelection(["alpha", "gamma"]), ["beta", "gamma"])).toBe(true);
+        expect(selectsAny(someSelection(["alpha"]), [])).toBe(false);
     });
 
     test("coversAll requires every selected value to be present", () => {

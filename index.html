@@ -30,41 +30,8 @@
               <input id="searchBox" type="search" placeholder="search model, provider, or family... (e.g. gemini, claude, llama)" />
             </div>
           </div>
-          <div class="filter-section">
-            <label class="filter-label">PROVIDER</label>
-            <div class="dropdown-filter">
-              <button class="dropdown-toggle" id="providerToggle" type="button">all</button>
-              <div class="dropdown-menu" id="providerMenu"></div>
-            </div>
-          </div>
-          <div class="filter-section">
-            <label class="filter-label">FAMILY</label>
-            <div class="dropdown-filter">
-              <button class="dropdown-toggle" id="familyToggle" type="button">all</button>
-              <div class="dropdown-menu" id="familyMenu"></div>
-            </div>
-          </div>
-          <div class="filter-section">
-            <label class="filter-label">CAPABILITIES</label>
-            <div class="dropdown-filter">
-              <button class="dropdown-toggle" id="capToggle" type="button">all</button>
-              <div class="dropdown-menu" id="capMenu"></div>
-            </div>
-          </div>
-          <div class="filter-section">
-            <label class="filter-label">MODALITIES INPUT</label>
-            <div class="dropdown-filter">
-              <button class="dropdown-toggle" id="modInToggle" type="button">all</button>
-              <div class="dropdown-menu" id="modInMenu"></div>
-            </div>
-          </div>
-          <div class="filter-section">
-            <label class="filter-label">MODALITIES OUTPUT</label>
-            <div class="dropdown-filter">
-              <button class="dropdown-toggle" id="modOutToggle" type="button">all</button>
-              <div class="dropdown-menu" id="modOutMenu"></div>
-            </div>
-          </div>
+          <!-- The five facet sections are built from the facet registry in main.ts. -->
+          <div class="facet-filters" id="facetFilters"></div>
           <div class="filter-section">
             <div class="range-item">
               <span class="range-label">CONTEXT RANGE</span>
