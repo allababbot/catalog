@@ -3,121 +3,299 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Model Catalog - models.dev</title>
+    <meta
+      name="description"
+      content="Every model in the models.dev catalog, with its price, context window and capabilities."
+    />
+    <title>Model catalog · models.dev</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Crect width='20' height='20' rx='4' fill='%230f1317'/%3E%3Cpath d='M4 6h12M4 10h8M4 14h10' stroke='%23fff' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E"
+    />
+    <script>
+      // Set the theme before first paint so the page never flashes the wrong ground.
+      (function () {
+        try {
+          var saved = localStorage.getItem("theme");
+          var theme =
+            saved === "light" || saved === "dark"
+              ? saved
+              : window.matchMedia("(prefers-color-scheme: dark)").matches
+                ? "dark"
+                : "light";
+          document.documentElement.dataset.theme = theme;
+        } catch (_) {
+          document.documentElement.dataset.theme = "light";
+        }
+      })();
+    </script>
   </head>
   <body>
-    <div class="wrap">
-      <header class="top">
-        <div class="top-inner">
-          <h1 class="title">Model Catalog</h1>
-          <div class="ticker">
-            <span class="stat"><strong id="statProv">0</strong> total provider</span>
-            <span class="stat stat-total"><strong id="statTotal">0</strong> total model</span>
-            <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">
-              <span class="theme-icon" aria-hidden="true">◐</span>
+    <a class="skip-link" href="#catalog">Skip to the catalog</a>
+
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="/" aria-label="Catalog, home">
+          <svg class="brand-mark" viewBox="0 0 20 20" aria-hidden="true">
+            <path d="M10 5.3C8.4 4.1 6.2 3.7 3.8 3.9v11.4c2.4-.2 4.6.2 6.2 1.4 1.6-1.2 3.8-1.6 6.2-1.4V3.9c-2.4-.2-4.6.2-6.2 1.4Z" />
+            <path d="M10 5.3v11.4" />
+          </svg>
+          <span class="brand-name">Catalog</span>
+          <span class="brand-scope">models.dev</span>
+        </a>
+
+        <div class="topbar-actions">
+          <button
+            class="icon-button theme-toggle"
+            id="themeToggle"
+            type="button"
+            aria-label="Switch to dark theme"
+            title="Switch theme"
+          >
+            <svg class="icon icon-moon" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M16.2 12.4A6.6 6.6 0 0 1 7.6 3.8a6.8 6.8 0 1 0 8.6 8.6Z" />
+            </svg>
+            <svg class="icon icon-sun" viewBox="0 0 20 20" aria-hidden="true">
+              <circle cx="10" cy="10" r="3.4" />
+              <path
+                d="M10 2.2v1.6M10 16.2v1.6M2.2 10h1.6M16.2 10h1.6M4.5 4.5l1.1 1.1M14.4 14.4l1.1 1.1M15.5 4.5l-1.1 1.1M5.6 14.4l-1.1 1.1"
+              />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main class="canvas">
+      <div class="title-row">
+        <div>
+          <h1>Model catalog</h1>
+          <p class="sub">Prices, context and capabilities from models.dev.</p>
+        </div>
+      </div>
+
+      <section class="summary" aria-label="Summary of the models in view" aria-live="polite">
+        <div class="summary-cell">
+          <span class="summary-label">Providers in view</span>
+          <span class="summary-value" id="statProv"><span class="skeleton skeleton-value"></span></span>
+        </div>
+        <div class="summary-cell">
+          <span class="summary-label" title="US dollars per 1M tokens">Median input <span class="unit">/1M</span></span>
+          <span class="summary-value" id="statMedIn"><span class="skeleton skeleton-value"></span></span>
+        </div>
+        <div class="summary-cell">
+          <span class="summary-label" title="US dollars per 1M tokens">Median output <span class="unit">/1M</span></span>
+          <span class="summary-value" id="statMedOut"><span class="skeleton skeleton-value"></span></span>
+        </div>
+        <div class="summary-cell">
+          <span class="summary-label">Largest context</span>
+          <span class="summary-value" id="statMaxCtx"><span class="skeleton skeleton-value"></span></span>
+        </div>
+      </section>
+
+      <div class="toolbar" role="search">
+        <div class="search-field">
+          <svg class="search-icon" viewBox="0 0 16 16" aria-hidden="true">
+            <circle cx="7" cy="7" r="4.4" />
+            <path d="m10.4 10.4 3 3" />
+          </svg>
+          <input
+            id="searchBox"
+            type="search"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="Search models or providers"
+            aria-label="Search models"
+          />
+        </div>
+
+        <div class="facet-filters" id="facetFilters" role="group" aria-label="Filter the catalog"></div>
+
+        <button
+          class="button button-quiet range-toggle"
+          id="rangeToggle"
+          type="button"
+          aria-expanded="false"
+          aria-controls="rangePanel"
+        >
+          Price &amp; limits
+          <span class="disclosure" aria-hidden="true"></span>
+        </button>
+
+        <div class="facet-popover" id="facetPopover" role="dialog" aria-labelledby="facetMenuTitle" hidden>
+          <div class="facet-popover-head">
+            <h2 id="facetMenuTitle">Provider</h2>
+            <button class="icon-button icon-button-small" id="facetMenuClose" type="button" aria-label="Close filter">
+              <svg class="icon" viewBox="0 0 16 16" aria-hidden="true">
+                <path d="m4 4 8 8M12 4l-8 8" />
+              </svg>
             </button>
           </div>
+          <div class="facet-search" id="facetSearchWrap" hidden>
+            <input
+              id="facetMenuSearch"
+              type="search"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="Find provider"
+              aria-label="Find a provider"
+            />
+          </div>
+          <label class="facet-all">
+            <input type="checkbox" id="facetSelectAll" />
+            <span id="facetAllLabel">All items</span>
+          </label>
+          <div class="facet-items" id="facetMenuList"></div>
         </div>
-      </header>
+      </div>
 
-      <div class="error" id="errorBox" hidden></div>
+      <div class="range-panel" id="rangePanel" hidden>
+        <div class="range-grid">
+          <fieldset class="range-group">
+            <legend>Context window <span class="unit">tokens</span></legend>
+            <div class="range-inputs">
+              <input type="number" id="contextMin" placeholder="min" min="0" aria-label="Minimum context window" />
+              <span class="range-dash" aria-hidden="true">–</span>
+              <input type="number" id="contextMax" placeholder="max" min="0" aria-label="Maximum context window" />
+            </div>
+          </fieldset>
+          <fieldset class="range-group">
+            <legend>Max output <span class="unit">tokens</span></legend>
+            <div class="range-inputs">
+              <input type="number" id="outputLimitMin" placeholder="min" min="0" aria-label="Minimum max output" />
+              <span class="range-dash" aria-hidden="true">–</span>
+              <input type="number" id="outputLimitMax" placeholder="max" min="0" aria-label="Maximum max output" />
+            </div>
+          </fieldset>
+          <fieldset class="range-group">
+            <legend>Input price <span class="unit">$ per 1M tokens</span></legend>
+            <div class="range-inputs">
+              <input type="number" id="costInputMin" placeholder="min" min="0" step="0.01" aria-label="Minimum input price" />
+              <span class="range-dash" aria-hidden="true">–</span>
+              <input type="number" id="costInputMax" placeholder="max" min="0" step="0.01" aria-label="Maximum input price" />
+            </div>
+          </fieldset>
+          <fieldset class="range-group">
+            <legend>Output price <span class="unit">$ per 1M tokens</span></legend>
+            <div class="range-inputs">
+              <input type="number" id="costOutputMin" placeholder="min" min="0" step="0.01" aria-label="Minimum output price" />
+              <span class="range-dash" aria-hidden="true">–</span>
+              <input type="number" id="costOutputMax" placeholder="max" min="0" step="0.01" aria-label="Maximum output price" />
+            </div>
+          </fieldset>
+        </div>
+        <label class="check-row">
+          <input type="checkbox" id="excludePlan" />
+          <span>Exclude subscription plans <span class="hint">Hides plan-only providers such as GitLab Duo and Kimi for Coding.</span></span>
+        </label>
+      </div>
 
-      <div class="main-content">
-        <div class="filters-sidebar">
-          <div class="filter-section">
-            <label class="filter-label">Search</label>
-            <div class="filter-input-wrapper">
-              <input id="searchBox" type="search" placeholder="search model, provider, or family... (e.g. gemini, claude, llama)" />
-            </div>
-          </div>
-          <!-- The five facet sections are built from the facet registry in main.ts. -->
-          <div class="facet-filters" id="facetFilters"></div>
-          <div class="filter-section">
-            <div class="range-item">
-              <span class="range-label">CONTEXT RANGE</span>
-              <div class="range-inputs">
-                <input type="number" id="contextMin" placeholder="min" min="0">
-                <span>-</span>
-                <input type="number" id="contextMax" placeholder="max" min="0">
-              </div>
-            </div>
-            <div class="range-item">
-              <span class="range-label">MAX OUTPUT RANGE</span>
-              <div class="range-inputs">
-                <input type="number" id="outputLimitMin" placeholder="min" min="0">
-                <span>-</span>
-                <input type="number" id="outputLimitMax" placeholder="max" min="0">
-              </div>
-            </div>
-            <div class="range-item">
-              <span class="range-label">INPUT COST RANGE</span>
-              <div class="range-inputs">
-                <input type="number" id="costInputMin" placeholder="min" min="0" step="0.01">
-                <span>-</span>
-                <input type="number" id="costInputMax" placeholder="max" min="0" step="0.01">
-              </div>
-            </div>
-            <div class="range-item">
-              <span class="range-label">OUTPUT COST RANGE</span>
-              <div class="range-inputs">
-                <input type="number" id="costOutputMin" placeholder="min" min="0" step="0.01">
-                <span>-</span>
-                <input type="number" id="costOutputMax" placeholder="max" min="0" step="0.01">
-              </div>
-            </div>
+      <div class="active-filters" id="activeFilters" hidden></div>
 
-          </div>
-          <div class="filter-actions">
-            <label class="exclude-plan">
-              <input type="checkbox" id="excludePlan">
-              <span>exclude plan providers</span>
-            </label>
-            <button class="clear-btn" id="clearBtn">Reset Filters</button>
+      <div class="results-head">
+        <div class="results-summary">
+          <p class="results-count" id="footInfo">Loading the catalog…</p>
+          <div class="match-row">
+            <div class="match-bar" id="matchBar" role="img" aria-label="Share of the catalog in view">
+              <span class="match-fill" id="matchFill"></span>
+            </div>
+            <span class="match-label" id="matchLabel"></span>
           </div>
         </div>
-        <div class="table-container">
-          <div class="table-shell">
-        <table>
+
+        <div class="sort-control">
+          <label for="sortSelect">Sort by</label>
+          <select id="sortSelect" class="select" aria-label="Sort models by"></select>
+          <button class="icon-button sort-direction" id="sortDir" type="button" aria-label="Reverse sort order">
+            <span id="sortDirArrow" aria-hidden="true">↓</span>
+          </button>
+        </div>
+      </div>
+
+      <section class="table-panel" id="catalog" aria-label="Models">
+        <div class="notice" id="errorBox" role="alert" hidden>
+          <div class="notice-message">
+            <svg class="notice-icon" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M8 2.4 14.2 13H1.8L8 2.4Z" />
+              <path d="M8 6.2v3.2M8 11.4v.2" />
+            </svg>
+            <p>
+              <strong>Couldn’t load the catalog.</strong>
+              <span id="errorMessage">Check your connection and try again.</span>
+            </p>
+          </div>
+          <button class="button" id="retryBtn" type="button">Try again</button>
+        </div>
+
+        <table class="catalog-table">
+          <colgroup>
+            <col class="col-provider" />
+            <col class="col-model" />
+            <col class="col-context" />
+            <col class="col-output" />
+            <col class="col-in" />
+            <col class="col-out" />
+            <col class="col-caps" />
+            <col class="col-modalities" />
+            <col class="col-released" />
+          </colgroup>
           <thead>
             <tr>
-              <th data-key="provider">Provider<span class="arrow">▲</span></th>
-              <th data-key="model">Model<span class="arrow">▲</span></th>
-              <th data-key="context" class="num">Context<span class="arrow">▲</span></th>
-              <th data-key="outputLimit" class="num">Max Out<span class="arrow">▲</span></th>
-              <th data-key="costInput" class="num">$ In<span class="arrow">▲</span></th>
-                            <th data-key="costOutput" class="num">$ Out<span class="arrow">▲</span></th>
-              <th>Capabilities</th>
-              <th>Mod In</th>
-              <th>Mod Out</th>
-              <th data-key="knowledge">Knowledge<span class="arrow">▲</span></th>
-              <th data-key="releaseDate">Release<span class="arrow">▲</span></th>
+              <th scope="col" data-key="provider" aria-sort="none">
+                <button class="sort-button" type="button">Provider <span class="arrow" aria-hidden="true">↑</span></button>
+              </th>
+              <th scope="col" data-key="model" aria-sort="none">
+                <button class="sort-button" type="button">Model <span class="arrow" aria-hidden="true">↑</span></button>
+              </th>
+              <th scope="col" data-key="context" class="num" aria-sort="none">
+                <button class="sort-button" type="button">Context <span class="arrow" aria-hidden="true">↑</span></button>
+              </th>
+              <th scope="col" data-key="outputLimit" class="num" aria-sort="none">
+                <button class="sort-button" type="button">Max output <span class="arrow" aria-hidden="true">↑</span></button>
+              </th>
+              <th scope="col" data-key="costInput" class="num" aria-sort="none">
+                <button class="sort-button" type="button">In /1M <span class="arrow" aria-hidden="true">↑</span></button>
+              </th>
+              <th scope="col" data-key="costOutput" class="num" aria-sort="none">
+                <button class="sort-button" type="button">Out /1M <span class="arrow" aria-hidden="true">↑</span></button>
+              </th>
+              <th scope="col">Capabilities</th>
+              <th scope="col">Modalities</th>
+              <th scope="col" data-key="releaseDate" class="num" aria-sort="none">
+                <button class="sort-button" type="button">Released <span class="arrow" aria-hidden="true">↑</span></button>
+              </th>
             </tr>
           </thead>
           <tbody id="tbody"></tbody>
         </table>
-      </div>
 
-      <div class="foot-row">
-        <span id="footInfo">showing 0 of 0 models</span>
-        <nav class="pagination" id="pagination">
-          <button class="page-btn" id="pagePrev" disabled>‹</button>
-          <div class="page-numbers" id="pageNumbers"></div>
-          <button class="page-btn" id="pageNext" disabled>›</button>
-        </nav>
-      </div>
+        <div class="table-foot">
+          <p class="table-range" id="tableRange"></p>
+          <nav class="pagination" id="pagination" aria-label="Pages">
+            <button class="page-arrow" id="pagePrev" type="button" aria-label="Previous page" disabled>‹</button>
+            <div class="page-numbers" id="pageNumbers"></div>
+            <button class="page-arrow" id="pageNext" type="button" aria-label="Next page" disabled>›</button>
+          </nav>
+        </div>
+      </section>
 
-      <div class="footer-meta">
-        <span><b style="color:var(--teal)">R</b> reasoning</span>
-        <span><b style="color:var(--teal)">T</b> tool call</span>
-        <span><b style="color:var(--teal)">V</b> vision/attachment</span>
-        <span><b style="color:var(--teal)">O</b> open weights</span>
-        <span>prices in USD per 1M tokens</span>
-        <span>·</span>
-        <span>data <a href="https://models.dev" target="_blank" rel="noreferrer">models.dev</a></span>
-        <span>·</span>
-        <span>click header to sort</span>
-      </div>
-    </div>
+      <footer class="pagefoot">
+        <div class="legend" aria-label="Capability marks">
+          <span><span class="cap on" aria-hidden="true">R</span> Reasoning</span>
+          <span><span class="cap on" aria-hidden="true">T</span> Tool call</span>
+          <span><span class="cap on" aria-hidden="true">V</span> Vision</span>
+          <span><span class="cap on" aria-hidden="true">O</span> Open weights</span>
+        </div>
+        <p class="source-note">
+          Prices in USD per 1M tokens. Data from
+          <a href="https://models.dev" target="_blank" rel="noreferrer">models.dev</a>. Catalog is an independent viewer.
+        </p>
+      </footer>
+    </main>
+
+    <noscript>
+      <p class="noscript-note">Catalog needs JavaScript to load the models.dev dataset.</p>
+    </noscript>
 
     <script type="module" src="/src/main.ts"></script>
   </body>

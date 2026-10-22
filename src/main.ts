@@ -1,8 +1,9 @@
 import { filterRows } from "./lib/filters";
-import { allSelections, facetCaption, facetItems } from "./lib/facets";
+import { allSelections } from "./lib/facets";
+import { fmtNum, fmtPrice } from "./lib/format";
 import { normalizeCatalog } from "./lib/normalizeCatalog";
 import { sortRows } from "./lib/sorting";
-import { allSelection, canonicalize, noneSelection, sameSelection, toggleValue } from "./lib/selection";
+import { allSelection, canonicalize, noneSelection, sameSelection, someSelection, toggleValue } from "./lib/selection";
 import { buildUrl, DEFAULT_DIRECTION, DEFAULT_SORT, parseUrlState } from "./lib/urlState";
 import type { UrlState } from "./lib/urlState";
 import "./styles.css";
@@ -10,35 +11,85 @@ import type { CatalogJson, ModelRow, SortKey } from "./types/catalog";
 import { FACETS, FACET_KEYS } from "./types/facets";
 import type { FacetEntry, FacetKey } from "./types/facets";
 import { RANGE_KEYS } from "./types/filter";
-import type { FilterState } from "./types/filter";
+import type { FilterState, RangeKey } from "./types/filter";
 import type { Selection } from "./types/selection";
 import { renderStats } from "./ui/renderStats";
 import { renderTable } from "./ui/renderTable";
 
 const PAGE_SIZE = 50;
-const PAGE_WINDOW = 3;
+const PAGE_WINDOW = 2;
+
+const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+    { key: "releaseDate", label: "Release date" },
+    { key: "costInput", label: "Input price" },
+    { key: "costOutput", label: "Output price" },
+    { key: "context", label: "Context window" },
+    { key: "outputLimit", label: "Max output" },
+    { key: "knowledge", label: "Knowledge cutoff" },
+    { key: "costCacheRead", label: "Cache read price" },
+    { key: "model", label: "Model name" },
+    { key: "provider", label: "Provider" },
+];
+
+const RANGE_LABELS: Record<RangeKey, string> = {
+    context: "Context",
+    outputLimit: "Max output",
+    costInput: "Input",
+    costOutput: "Output",
+};
 
 let allRows: ModelRow[] = [];
 let currentPage = 1;
 let totalPages = 1;
 let sortKey: SortKey = DEFAULT_SORT;
 let sortDirection: 1 | -1 = DEFAULT_DIRECTION;
+let initialized = false;
+let loading = true;
+let activeFacet: FacetKey | null = null;
+let lastFacetButton: HTMLButtonElement | null = null;
+let facets: Record<FacetKey, FacetControl>;
 
 const selections: Record<FacetKey, Selection> = allSelections();
 
-const searchBox = query<HTMLInputElement>("#searchBox");
-const tbody = query<HTMLTableSectionElement>("#tbody");
-const footInfo = query<HTMLElement>("#footInfo");
-const clearBtn = query<HTMLButtonElement>("#clearBtn");
-const statProv = query<HTMLElement>("#statProv");
-const statTotal = query<HTMLElement>("#statTotal");
-const errorBox = query<HTMLElement>("#errorBox");
-const themeToggle = query<HTMLButtonElement>("#themeToggle");
-const excludePlanCheckbox = query<HTMLInputElement>("#excludePlan");
-const pagePrev = query<HTMLButtonElement>("#pagePrev");
-const pageNext = query<HTMLButtonElement>("#pageNext");
-const pageNumbers = query<HTMLElement>("#pageNumbers");
-const facetContainer = query<HTMLElement>("#facetFilters");
+const els = {
+    searchBox: query<HTMLInputElement>("#searchBox"),
+    tbody: query<HTMLTableSectionElement>("#tbody"),
+    tablePanel: query<HTMLElement>(".table-panel"),
+    tableFoot: query<HTMLElement>(".table-foot"),
+    footInfo: query<HTMLElement>("#footInfo"),
+    tableRange: query<HTMLElement>("#tableRange"),
+    matchBar: query<HTMLElement>("#matchBar"),
+    matchFill: query<HTMLElement>("#matchFill"),
+    matchLabel: query<HTMLElement>("#matchLabel"),
+    statProv: query<HTMLElement>("#statProv"),
+    statMedIn: query<HTMLElement>("#statMedIn"),
+    statMedOut: query<HTMLElement>("#statMedOut"),
+    statMaxCtx: query<HTMLElement>("#statMaxCtx"),
+    errorBox: query<HTMLElement>("#errorBox"),
+    errorMessage: query<HTMLElement>("#errorMessage"),
+    retryBtn: query<HTMLButtonElement>("#retryBtn"),
+    themeToggle: query<HTMLButtonElement>("#themeToggle"),
+    excludePlan: query<HTMLInputElement>("#excludePlan"),
+    pagePrev: query<HTMLButtonElement>("#pagePrev"),
+    pageNext: query<HTMLButtonElement>("#pageNext"),
+    pageNumbers: query<HTMLElement>("#pageNumbers"),
+    pagination: query<HTMLElement>("#pagination"),
+    facetFilters: query<HTMLElement>("#facetFilters"),
+    facetPopover: query<HTMLElement>("#facetPopover"),
+    facetMenuTitle: query<HTMLElement>("#facetMenuTitle"),
+    facetMenuClose: query<HTMLButtonElement>("#facetMenuClose"),
+    facetSearchWrap: query<HTMLElement>("#facetSearchWrap"),
+    facetMenuSearch: query<HTMLInputElement>("#facetMenuSearch"),
+    facetSelectAll: query<HTMLInputElement>("#facetSelectAll"),
+    facetAllLabel: query<HTMLElement>("#facetAllLabel"),
+    facetMenuList: query<HTMLElement>("#facetMenuList"),
+    rangeToggle: query<HTMLButtonElement>("#rangeToggle"),
+    rangePanel: query<HTMLElement>("#rangePanel"),
+    activeFilters: query<HTMLElement>("#activeFilters"),
+    sortSelect: query<HTMLSelectElement>("#sortSelect"),
+    sortDir: query<HTMLButtonElement>("#sortDir"),
+    sortDirArrow: query<HTMLElement>("#sortDirArrow"),
+};
 
 const rangeInputs = {
     context: { min: query<HTMLInputElement>("#contextMin"), max: query<HTMLInputElement>("#contextMax") },
@@ -47,81 +98,133 @@ const rangeInputs = {
     costOutput: { min: query<HTMLInputElement>("#costOutputMin"), max: query<HTMLInputElement>("#costOutputMax") },
 } as const;
 
-void boot();
+interface FacetControl {
+    definition: FacetEntry;
+    items: string[];
+    button: HTMLButtonElement;
+    value: HTMLElement;
+}
 
-// ── Theme (dark mode) ───────────────────────────────────
+// ── Boot ────────────────────────────────────────────────────
+
+initTheme();
+populateSortOptions();
+bindEvents();
+void loadCatalog();
+
+async function loadCatalog(): Promise<void> {
+    renderLoading();
+
+    try {
+        const response = await fetch("/api/catalog");
+        if (!response.ok) throw new Error(`The catalog service answered ${response.status}.`);
+
+        const catalog = (await response.json()) as CatalogJson;
+        const rows = normalizeCatalog(catalog);
+        if (rows.length === 0) throw new Error("The catalog came back empty.");
+
+        allRows = rows;
+
+        if (!initialized) {
+            buildFacets(rows);
+            loadFromURL();
+            initialized = true;
+        }
+
+        loading = false;
+        els.errorBox.hidden = true;
+        els.tablePanel.setAttribute("aria-busy", "false");
+        render();
+    } catch (error) {
+        console.error("Catalog load failed:", error);
+        const message = error instanceof Error ? error.message : "The catalog could not be loaded.";
+        showError(message);
+    }
+}
+
+function renderLoading(): void {
+    loading = true;
+    els.errorBox.hidden = true;
+    els.tablePanel.setAttribute("aria-busy", "true");
+    els.activeFilters.hidden = true;
+    els.activeFilters.innerHTML = "";
+    els.pagination.hidden = true;
+    els.tableFoot.hidden = true;
+
+    for (const element of [els.statProv, els.statMedIn, els.statMedOut, els.statMaxCtx]) {
+        element.innerHTML = '<span class="skeleton skeleton-value"></span>';
+    }
+
+    els.footInfo.textContent = "Loading the catalog…";
+    els.tableRange.textContent = "";
+    els.matchBar.setAttribute("aria-label", "Loading the catalog");
+    els.matchFill.style.width = "0%";
+    els.matchLabel.textContent = "";
+
+    const rows = Array.from({ length: 9 }, (_, index) => {
+        const cells = Array.from({ length: 9 }, (_, cell) => {
+            const shape = cell === 0 || cell === 1 ? " wide" : cell > 2 && cell < 6 ? " narrow" : "";
+            return `<td aria-hidden="true"><span class="skeleton-bar${shape}"></span></td>`;
+        }).join("");
+        return `<tr class="skeleton-row" aria-hidden="true" data-skeleton="${index}">${cells}</tr>`;
+    }).join("");
+
+    els.tbody.innerHTML = rows;
+}
+
+function showError(message: string): void {
+    loading = false;
+    initialized = false;
+    els.tablePanel.setAttribute("aria-busy", "false");
+    els.errorBox.hidden = false;
+    els.errorMessage.textContent = `${message} Try again in a moment.`;
+    els.tbody.innerHTML = "";
+
+    for (const element of [els.statProv, els.statMedIn, els.statMedOut, els.statMaxCtx]) {
+        element.innerHTML = '<span class="dash">—</span>';
+    }
+
+    els.footInfo.textContent = "Catalog unavailable";
+    els.tableRange.textContent = "";
+    els.matchBar.setAttribute("aria-label", "The catalog is unavailable");
+    els.matchFill.style.width = "0%";
+    els.matchLabel.textContent = "";
+    els.pagination.hidden = true;
+    els.tableFoot.hidden = true;
+}
+
+// ── Theme ───────────────────────────────────────────────────
 
 type Theme = "light" | "dark";
 
-function getInitialTheme(): Theme {
-    const saved = localStorage.getItem("theme");
-    if (saved === "light" || saved === "dark") return saved;
-    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+function initTheme(): void {
+    const theme: Theme = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+    applyTheme(theme);
+
+    els.themeToggle.addEventListener("click", () => {
+        const next: Theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+        applyTheme(next);
+        try {
+            localStorage.setItem("theme", next);
+        } catch {
+            // A blocked storage API should not break the toggle.
+        }
+    });
 }
 
 function applyTheme(theme: Theme): void {
     document.documentElement.dataset.theme = theme;
-    themeToggle.setAttribute("aria-pressed", String(theme === "dark"));
-    const icon = themeToggle.querySelector<HTMLElement>(".theme-icon");
-    if (icon) icon.textContent = theme === "dark" ? "☀" : "☾";
+    els.themeToggle.setAttribute("aria-label", theme === "dark" ? "Switch to light theme" : "Switch to dark theme");
 }
 
-function initTheme(): void {
-    applyTheme(getInitialTheme());
-    themeToggle.addEventListener("click", () => {
-        const next: Theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
-        applyTheme(next);
-        localStorage.setItem("theme", next);
-    });
-}
+// ── Facets ──────────────────────────────────────────────────
 
-async function boot(): Promise<void> {
-    try {
-        console.log("Fetching catalog...");
-        const response = await fetch("/api/catalog");
-        console.log("Response status:", response.status, response.ok);
-        if (!response.ok) throw new Error(`Gagal memuat catalog (${response.status})`);
+function buildFacets(rows: ModelRow[]): void {
+    els.facetFilters.innerHTML = "";
 
-        const catalog = (await response.json()) as CatalogJson;
-        console.log("Catalog keys:", Object.keys(catalog));
-        console.log("Providers count:", Object.keys(catalog.providers ?? {}).length);
-
-        allRows = normalizeCatalog(catalog);
-        console.log("Total rows:", allRows.length);
-
-        initTheme();
-        populateFacets(allRows);
-        setupDropdowns();
-        loadFromURL();
-        bindEvents();
-        render();
-    } catch (error) {
-        console.error("Boot error:", error);
-        errorBox.hidden = false;
-        errorBox.textContent = error instanceof Error ? error.message : "Gagal memuat data katalog.";
-    }
-}
-
-// ── Facets ────────────────────────────────────────────────
-
-interface FacetControl {
-    definition: FacetEntry;
-    items: string[];
-    section: HTMLElement;
-    toggle: HTMLButtonElement;
-    menu: HTMLElement;
-    selectAllBox: HTMLInputElement;
-    itemBoxes: HTMLInputElement[];
-    setSelection(selection: Selection): void;
-}
-
-let facets!: Record<FacetKey, FacetControl>;
-
-/** Builds the sidebar: one section per facet, in the order of the registry. */
-function populateFacets(rows: ModelRow[]): void {
     const controls = FACETS.map((definition) => {
         const control = createFacetControl(definition, definition.items(rows));
-        facetContainer.appendChild(control.section);
+        els.facetFilters.appendChild(control.button);
         return [definition.key, control] as const;
     });
 
@@ -129,174 +232,305 @@ function populateFacets(rows: ModelRow[]): void {
 }
 
 function createFacetControl(definition: FacetEntry, items: string[]): FacetControl {
-    const section = document.createElement("div");
-    section.className = "filter-section";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "filter-button";
+    button.id = `${definition.key}Toggle`;
+    button.setAttribute("aria-haspopup", "dialog");
+    button.setAttribute("aria-expanded", "false");
+    button.setAttribute("aria-controls", "facetPopover");
 
-    const label = document.createElement("label");
-    label.className = "filter-label";
-    label.textContent = definition.label;
+    const name = document.createElement("span");
+    name.className = "filter-name";
+    name.textContent = definition.label;
 
-    const dropdown = document.createElement("div");
-    dropdown.className = "dropdown-filter";
+    const value = document.createElement("span");
+    value.className = "filter-value";
 
-    const toggle = document.createElement("button");
-    toggle.className = "dropdown-toggle";
-    toggle.id = `${definition.key}Toggle`;
-    toggle.type = "button";
-    toggle.textContent = "all";
-
-    const menu = document.createElement("div");
-    menu.className = "dropdown-menu";
-    menu.id = `${definition.key}Menu`;
-
-    dropdown.append(toggle, menu);
-    section.append(label, dropdown);
-
-    const selectAllBox = document.createElement("input");
-    selectAllBox.type = "checkbox";
-    selectAllBox.className = "select-all";
-
-    const selectAllLabel = document.createElement("label");
-    selectAllLabel.appendChild(selectAllBox);
-    selectAllLabel.append(" Select All");
-    menu.appendChild(selectAllLabel);
-
-    const sep = document.createElement("div");
-    sep.className = "dropdown-sep";
-    menu.appendChild(sep);
-
-    const itemBoxes: HTMLInputElement[] = [];
-    for (const item of items) {
-        const itemLabel = document.createElement("label");
-        const cb = document.createElement("input");
-        cb.type = "checkbox";
-        cb.className = "dropdown-item-cb";
-        cb.value = item;
-        itemLabel.appendChild(cb);
-        itemLabel.append(` ${definition.itemLabels[item] ?? item}`);
-        menu.appendChild(itemLabel);
-        itemBoxes.push(cb);
-    }
-
-    const blank = document.createElement("div");
-    blank.className = "dropdown-blank";
-    menu.appendChild(blank);
-
-    const control: FacetControl = {
-        definition,
-        items,
-        section,
-        toggle,
-        menu,
-        selectAllBox,
-        itemBoxes,
-        setSelection: () => {},
-    };
-
-    control.setSelection = (selection: Selection) => {
-        const canonical = canonicalize(selection, control.items);
-        selections[definition.key] = canonical;
-
-        for (const cb of control.itemBoxes) {
-            cb.checked =
-                canonical.mode === "all" ? true : canonical.mode === "some" ? canonical.values.includes(cb.value) : false;
-        }
-        control.selectAllBox.checked = canonical.mode === "all";
-        control.selectAllBox.indeterminate = canonical.mode === "some";
-        control.toggle.textContent = facetCaption(definition, canonical);
-    };
-
-    control.selectAllBox.addEventListener("change", () => {
-        control.setSelection(control.selectAllBox.checked ? allSelection() : noneSelection());
-        resetPagination();
+    button.append(name, value);
+    button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        openFacet(activeFacet === definition.key ? null : definition.key);
     });
 
-    for (const cb of control.itemBoxes) {
-        cb.addEventListener("change", () => {
-            control.setSelection(toggleValue(selections[definition.key], cb.value, cb.checked, control.items));
-            resetPagination();
-        });
-    }
-
-    control.setSelection(allSelection());
+    const control: FacetControl = { definition, items, button, value };
+    updateFacetButton(control);
     return control;
 }
 
-// ── Dropdown open/close ─────────────────────────────────────
+function updateFacetButton(control: FacetControl): void {
+    const selection = selections[control.definition.key];
+    const summary = summaryFor(control.definition, selection, control.items);
+    control.value.textContent = summary;
+    control.button.dataset.active = String(selection.mode !== "all");
+    control.button.setAttribute("aria-label", `${control.definition.label}: ${summary}`);
+}
 
-function setupDropdowns(): void {
-    for (const key of FACET_KEYS) {
-        setupDropdown(facets[key].toggle, facets[key].menu);
+function summaryFor(definition: FacetEntry, selection: Selection, items: string[]): string {
+    if (selection.mode === "all") return "All";
+    if (selection.mode === "none") return "None";
+    if (selection.values.length === 1) return definition.itemLabels[selection.values[0]] ?? selection.values[0];
+    return `${selection.values.length} of ${items.length}`;
+}
+
+function updateFacetButtons(): void {
+    if (!facets) return;
+    for (const key of FACET_KEYS) updateFacetButton(facets[key]);
+}
+
+function setFacetSelection(key: FacetKey, selection: Selection): void {
+    const control = facets[key];
+    selections[key] = canonicalize(selection, control.items);
+    updateFacetButton(control);
+}
+
+function openFacet(key: FacetKey | null): void {
+    if (key === null || key === activeFacet) {
+        closeFacet(key === null);
+        return;
+    }
+
+    activeFacet = key;
+    const control = facets[key];
+
+    els.rangePanel.hidden = true;
+    els.rangeToggle.setAttribute("aria-expanded", "false");
+
+    els.facetMenuTitle.textContent = control.definition.label;
+    els.facetMenuSearch.value = "";
+    els.facetMenuSearch.placeholder = `Find ${control.definition.label.toLowerCase()}`;
+    els.facetMenuSearch.setAttribute("aria-label", `Find a ${control.definition.label.toLowerCase()}`);
+    els.facetSearchWrap.hidden = control.items.length <= 10;
+    els.facetAllLabel.textContent = `All items (${control.items.length.toLocaleString("en-US")})`;
+
+    renderFacetItems();
+    syncFacetAll();
+    els.facetPopover.hidden = false;
+    lastFacetButton = control.button;
+    updateFacetExpanded();
+    positionFacetPopover(control.button);
+
+    requestAnimationFrame(() => {
+        if (!els.facetSearchWrap.hidden && !window.matchMedia("(max-width: 900px)").matches) {
+            els.facetMenuSearch.focus();
+        } else {
+            els.facetSelectAll.focus();
+        }
+    });
+}
+
+function closeFacet(returnFocus = false): void {
+    if (activeFacet === null) return;
+
+    activeFacet = null;
+    els.facetPopover.hidden = true;
+    updateFacetExpanded();
+
+    if (returnFocus && lastFacetButton) {
+        lastFacetButton.focus();
     }
 }
 
-function setupDropdown(toggle: HTMLElement, menu: HTMLElement): void {
-    toggle.addEventListener("click", (e) => {
-        e.stopPropagation();
-        const willOpen = !menu.classList.contains("open");
-        document.querySelectorAll(".dropdown-menu.open").forEach((m) => m.classList.remove("open"));
-        if (willOpen) menu.classList.add("open");
-    });
-    menu.addEventListener("click", (e) => {
-        e.stopPropagation();
-    });
+function updateFacetExpanded(): void {
+    if (!facets) return;
+    for (const key of FACET_KEYS) {
+        facets[key].button.setAttribute("aria-expanded", String(activeFacet === key));
+    }
 }
 
-document.addEventListener("click", () => {
-    document.querySelectorAll(".dropdown-menu.open").forEach((m) => m.classList.remove("open"));
-});
+function positionFacetPopover(button: HTMLButtonElement): void {
+    const toolbar = els.facetFilters.closest(".toolbar");
+    if (!(toolbar instanceof HTMLElement)) return;
+
+    const toolbarRect = toolbar.getBoundingClientRect();
+    const buttonRect = button.getBoundingClientRect();
+    const top = Math.max(0, buttonRect.bottom - toolbarRect.top + 8);
+    els.facetPopover.style.setProperty("--pop-top", `${Math.round(top)}px`);
+
+    if (window.matchMedia("(max-width: 900px)").matches) {
+        els.facetPopover.style.removeProperty("--pop-left");
+        return;
+    }
+
+    const maxLeft = Math.max(0, toolbar.clientWidth - 320);
+    const left = Math.min(Math.max(0, buttonRect.left - toolbarRect.left), maxLeft);
+    els.facetPopover.style.setProperty("--pop-left", `${left}px`);
+}
+
+function renderFacetItems(): void {
+    if (activeFacet === null || !facets) return;
+
+    const control = facets[activeFacet];
+    const selection = selections[activeFacet];
+    const queryText = els.facetMenuSearch.value.trim().toLowerCase();
+    const fragment = document.createDocumentFragment();
+    let visible = 0;
+
+    for (const item of control.items) {
+        const label = control.definition.itemLabels[item] ?? item;
+        if (queryText && !label.toLowerCase().includes(queryText) && !item.toLowerCase().includes(queryText)) continue;
+
+        visible += 1;
+        const row = document.createElement("label");
+        row.className = "facet-item";
+
+        const box = document.createElement("input");
+        box.type = "checkbox";
+        box.value = item;
+        box.checked =
+            selection.mode === "all" || (selection.mode === "some" && selection.values.includes(item));
+
+        const text = document.createElement("span");
+        text.textContent = label;
+
+        box.addEventListener("change", () => {
+            if (activeFacet === null) return;
+            const selection = selections[activeFacet];
+            // With every item selected, clicking one is meant to narrow the view to it,
+            // not to drop it from a list of 231 other providers.
+            const next =
+                selection.mode === "all"
+                    ? canonicalize(someSelection([item]), control.items)
+                    : toggleValue(selection, item, box.checked, control.items);
+            setFacetSelection(activeFacet, next);
+            syncFacetItemBoxes();
+            syncFacetAll();
+            goToPage(1);
+            render();
+        });
+
+        row.append(box, text);
+        fragment.appendChild(row);
+    }
+
+    els.facetMenuList.innerHTML = "";
+
+    if (visible === 0) {
+        const empty = document.createElement("p");
+        empty.className = "facet-empty";
+        empty.textContent = "No matches.";
+        els.facetMenuList.appendChild(empty);
+    } else {
+        els.facetMenuList.appendChild(fragment);
+    }
+}
+
+function syncFacetAll(): void {
+    if (activeFacet === null) return;
+    const selection = selections[activeFacet];
+    els.facetSelectAll.checked = selection.mode === "all";
+    els.facetSelectAll.indeterminate = selection.mode === "some";
+}
+
+function syncFacetItemBoxes(): void {
+    if (activeFacet === null) return;
+    const selection = selections[activeFacet];
+
+    for (const box of els.facetMenuList.querySelectorAll<HTMLInputElement>("input[type=checkbox]")) {
+        box.checked = selection.mode === "all" || (selection.mode === "some" && selection.values.includes(box.value));
+    }
+}
 
 // ── Event binding ───────────────────────────────────────────
 
 function bindEvents(): void {
-    let searchTimer: ReturnType<typeof setTimeout>;
+    let searchTimer: ReturnType<typeof setTimeout> | undefined;
 
-    searchBox.addEventListener("input", () => {
+    els.searchBox.addEventListener("input", () => {
         clearTimeout(searchTimer);
         searchTimer = setTimeout(() => {
             goToPage(1);
             render();
-        }, 120);
+        }, 140);
     });
 
-    Object.values(rangeInputs).forEach(({ min, max }) => {
-        min.addEventListener("input", resetPagination);
-        max.addEventListener("input", resetPagination);
+    for (const { min, max } of Object.values(rangeInputs)) {
+        min.addEventListener("input", () => {
+            goToPage(1);
+            render();
+        });
+        max.addEventListener("input", () => {
+            goToPage(1);
+            render();
+        });
+    }
+
+    els.excludePlan.addEventListener("change", () => {
+        goToPage(1);
+        render();
     });
-    excludePlanCheckbox.addEventListener("change", resetPagination);
+
+    els.retryBtn.addEventListener("click", () => {
+        void loadCatalog();
+    });
+
+    els.rangeToggle.addEventListener("click", () => {
+        const willOpen = els.rangePanel.hidden;
+        closeFacet();
+        els.rangePanel.hidden = !willOpen;
+        els.rangeToggle.setAttribute("aria-expanded", String(willOpen));
+    });
+
+    els.facetPopover.addEventListener("click", (event) => event.stopPropagation());
+    els.facetMenuClose.addEventListener("click", () => closeFacet(true));
+    els.facetMenuSearch.addEventListener("input", renderFacetItems);
+
+    els.facetSelectAll.addEventListener("change", () => {
+        if (activeFacet === null) return;
+        const next = els.facetSelectAll.checked ? allSelection() : noneSelection();
+        setFacetSelection(activeFacet, next);
+        renderFacetItems();
+        syncFacetAll();
+        goToPage(1);
+        render();
+    });
+
+    document.addEventListener("click", () => closeFacet());
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && activeFacet !== null) {
+            closeFacet(true);
+        }
+    });
+
+    window.addEventListener("resize", () => {
+        if (activeFacet === null) return;
+        const button = facets[activeFacet].button;
+        positionFacetPopover(button);
+    });
 
     window.addEventListener("popstate", () => {
+        if (!initialized) return;
         lastPushedState = null;
-        applyUrlState(parseUrlState(window.location.search, window.location.hash, facetItems(allRows)));
+        applyUrlState(parseUrlState(window.location.search, window.location.hash, facetItemsForRows()));
         replaceNextUrl = true;
         render();
     });
 
-    pagePrev.addEventListener("click", () => {
+    els.pagePrev.addEventListener("click", () => {
         if (currentPage > 1) {
             goToPage(currentPage - 1);
             render();
         }
     });
 
-    pageNext.addEventListener("click", () => {
+    els.pageNext.addEventListener("click", () => {
         if (currentPage < totalPages) {
             goToPage(currentPage + 1);
             render();
         }
     });
 
-    clearBtn.addEventListener("click", () => {
-        searchBox.value = "";
-        for (const key of FACET_KEYS) facets[key].setSelection(allSelection());
+    els.sortSelect.addEventListener("change", () => {
+        const key = els.sortSelect.value as SortKey;
+        if (!SORT_OPTIONS.some((option) => option.key === key)) return;
+        sortKey = key;
+        sortDirection = defaultSortDirection(key);
+        goToPage(1);
+        render();
+    });
 
-        Object.values(rangeInputs).forEach(({ min, max }) => {
-            min.value = "";
-            max.value = "";
-        });
-        excludePlanCheckbox.checked = false;
-        sortKey = DEFAULT_SORT;
-        sortDirection = DEFAULT_DIRECTION;
+    els.sortDir.addEventListener("click", () => {
+        sortDirection = sortDirection === 1 ? -1 : 1;
         goToPage(1);
         render();
     });
@@ -305,104 +539,328 @@ function bindEvents(): void {
         th.addEventListener("click", () => {
             const key = th.dataset.key as SortKey;
             if (sortKey === key) {
-                sortDirection *= -1;
+                sortDirection = sortDirection === 1 ? -1 : 1;
             } else {
                 sortKey = key;
-                sortDirection = 1;
+                sortDirection = defaultSortDirection(key);
             }
             goToPage(1);
             render();
         });
+    });
+
+    els.tbody.addEventListener("click", (event) => {
+        const target = event.target;
+        if (target instanceof HTMLElement && target.dataset.action === "clear-filters") {
+            clearAllFilters();
+            els.searchBox.focus();
+        }
     });
 }
 
 // ── Render ──────────────────────────────────────────────────
 
 function render(): void {
+    if (loading) return;
+
     const filtered = filterRows(allRows, buildFilterState());
     const sorted = sortRows(filtered, sortKey, sortDirection);
 
     totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
-    if (currentPage > totalPages) goToPage(totalPages);
+    if (currentPage > totalPages) currentPage = totalPages;
 
     const start = (currentPage - 1) * PAGE_SIZE;
     const pageRows = sorted.slice(start, start + PAGE_SIZE);
 
-    renderTable(tbody, pageRows);
-    renderStats({ providers: statProv, total: statTotal, footInfo }, pageRows, filtered, allRows);
+    renderTable(els.tbody, pageRows);
+    els.tbody.setAttribute("aria-busy", "false");
+
+    renderStats(
+        {
+            providers: els.statProv,
+            medianInput: els.statMedIn,
+            medianOutput: els.statMedOut,
+            maxContext: els.statMaxCtx,
+            footInfo: els.footInfo,
+            tableRange: els.tableRange,
+            matchBar: els.matchBar,
+            matchFill: els.matchFill,
+            matchLabel: els.matchLabel,
+        },
+        filtered,
+        allRows.length,
+        sorted.length === 0 ? 0 : start + 1,
+        Math.min(start + PAGE_SIZE, sorted.length),
+    );
+
+    renderActiveFilters();
     renderPagination();
     renderSortIndicators();
     syncUrl();
 }
 
-function renderPagination(): void {
-    pagePrev.disabled = currentPage <= 1;
-    pageNext.disabled = currentPage >= totalPages;
+function renderActiveFilters(): void {
+    const chips: HTMLElement[] = [];
 
-    const pages: (number | "ellipsis-start" | "ellipsis-end")[] = [];
+    if (initialized) {
+        for (const key of FACET_KEYS) {
+            const control = facets[key];
+            const selection = selections[key];
 
-    if (totalPages <= 1) {
-        pageNumbers.innerHTML = "";
+            if (selection.mode === "none") {
+                chips.push(
+                    makeChip(`${control.definition.label}: none`, () => {
+                        setFacetSelection(key, allSelection());
+                        goToPage(1);
+                        render();
+                    }),
+                );
+                continue;
+            }
+
+            if (selection.mode !== "some") continue;
+
+            const shown = selection.values.slice(0, 3);
+            for (const value of shown) {
+                const label = control.definition.itemLabels[value] ?? value;
+                chips.push(
+                    makeChip(`${control.definition.label}: ${label}`, () => {
+                        setFacetSelection(key, toggleValue(selections[key], value, false, control.items));
+                        goToPage(1);
+                        render();
+                    }),
+                );
+            }
+
+            const rest = selection.values.length - shown.length;
+            if (rest > 0) {
+                chips.push(makeMoreChip(rest, () => openFacet(key)));
+            }
+        }
+
+        for (const key of RANGE_KEYS) {
+            const text = rangeChipText(key);
+            if (!text) continue;
+            chips.push(
+                makeChip(text, () => {
+                    rangeInputs[key].min.value = "";
+                    rangeInputs[key].max.value = "";
+                    goToPage(1);
+                    render();
+                }),
+            );
+        }
+
+        if (els.excludePlan.checked) {
+            chips.push(
+                makeChip("Plans excluded", () => {
+                    els.excludePlan.checked = false;
+                    goToPage(1);
+                    render();
+                }),
+            );
+        }
+    }
+
+    if (chips.length === 0) {
+        els.activeFilters.hidden = true;
+        els.activeFilters.innerHTML = "";
         return;
     }
 
-    pages.push(1);
+    const clear = document.createElement("button");
+    clear.type = "button";
+    clear.className = "clear-filters";
+    clear.textContent = "Clear all";
+    clear.addEventListener("click", clearAllFilters);
 
-    let startPage = Math.max(2, currentPage - PAGE_WINDOW);
-    let endPage = Math.min(totalPages - 1, currentPage + PAGE_WINDOW);
+    els.activeFilters.innerHTML = "";
+    els.activeFilters.append(...chips, clear);
+    els.activeFilters.hidden = false;
+}
+
+function makeChip(text: string, onRemove: () => void): HTMLElement {
+    const chip = document.createElement("span");
+    chip.className = "chip";
+
+    const label = document.createElement("span");
+    label.textContent = text;
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "chip-remove";
+    remove.setAttribute("aria-label", `Remove ${text}`);
+    remove.innerHTML = `<svg viewBox="0 0 10 10" aria-hidden="true"><path d="m2 2 6 6M8 2l-6 6"/></svg>`;
+    remove.addEventListener("click", onRemove);
+
+    chip.append(label, remove);
+    return chip;
+}
+
+function makeMoreChip(count: number, onClick: () => void): HTMLElement {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "chip chip-more";
+    chip.textContent = `+${count} more`;
+    chip.addEventListener("click", (event) => {
+        event.stopPropagation();
+        onClick();
+    });
+    return chip;
+}
+
+function rangeChipText(key: RangeKey): string | null {
+    const min = rangeInputs[key].min.value.trim();
+    const max = rangeInputs[key].max.value.trim();
+    if (!min && !max) return null;
+
+    const format = (value: string) => {
+        const number = Number(value);
+        if (!Number.isFinite(number)) return value;
+        return key === "costInput" || key === "costOutput" ? fmtPrice(number) : fmtNum(number);
+    };
+
+    const label = RANGE_LABELS[key];
+    if (min && max) return `${label} ${format(min)}–${format(max)}`;
+    if (min) return `${label} ≥ ${format(min)}`;
+    return `${label} ≤ ${format(max)}`;
+}
+
+function renderPagination(): void {
+    const hasPages = totalPages > 1;
+    els.pagination.hidden = !hasPages;
+    els.tableFoot.hidden = false;
+
+    els.pagePrev.disabled = currentPage <= 1;
+    els.pageNext.disabled = currentPage >= totalPages;
+
+    if (!hasPages) {
+        els.pageNumbers.innerHTML = "";
+        return;
+    }
+
+    const pages: (number | "ellipsis-start" | "ellipsis-end")[] = [1];
+    const startPage = Math.max(2, currentPage - PAGE_WINDOW);
+    const endPage = Math.min(totalPages - 1, currentPage + PAGE_WINDOW);
 
     if (startPage > 2) pages.push("ellipsis-start");
-    for (let p = startPage; p <= endPage; p++) pages.push(p);
+    for (let page = startPage; page <= endPage; page += 1) pages.push(page);
     if (endPage < totalPages - 1) pages.push("ellipsis-end");
+    pages.push(totalPages);
 
-    if (totalPages > 1) pages.push(totalPages);
-
-    pageNumbers.innerHTML = pages
-        .map((p) =>
-            typeof p === "string"
-                ? `<span class="page-ellipsis">…</span>`
-                : `<button class="page-num${p === currentPage ? " active" : ""}" data-page="${p}">${p}</button>`,
-        )
+    els.pageNumbers.innerHTML = pages
+        .map((page) => {
+            if (typeof page === "string") {
+                return `<span class="page-ellipsis" aria-hidden="true">…</span>`;
+            }
+            const current = page === currentPage ? ' aria-current="page"' : "";
+            const label = page === currentPage ? `Page ${page}, current page` : `Page ${page}`;
+            return `<button class="page-num" type="button" data-page="${page}" aria-label="${label}"${current}>${page}</button>`;
+        })
         .join("");
 
-    pageNumbers.querySelectorAll<HTMLButtonElement>(".page-num").forEach((btn) => {
-        btn.addEventListener("click", () => {
-            goToPage(Number(btn.dataset.page));
+    els.pageNumbers.querySelectorAll<HTMLButtonElement>(".page-num").forEach((button) => {
+        button.addEventListener("click", () => {
+            const page = Number(button.dataset.page);
+            if (!Number.isInteger(page)) return;
+            goToPage(page);
             render();
+            const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+            els.tablePanel.scrollIntoView({ block: "start", behavior: reduceMotion ? "auto" : "smooth" });
         });
     });
 }
 
 function renderSortIndicators(): void {
     document.querySelectorAll<HTMLTableCellElement>("thead th[data-key]").forEach((th) => {
-        const sorted = th.dataset.key === sortKey;
-        th.classList.toggle("sorted", sorted);
+        const active = th.dataset.key === sortKey;
+        th.classList.toggle("sorted", active);
+        th.setAttribute("aria-sort", active ? (sortDirection === 1 ? "ascending" : "descending") : "none");
+
         const arrow = th.querySelector<HTMLElement>(".arrow");
-        if (arrow) arrow.textContent = sortDirection === 1 ? "▲" : "▼";
+        if (arrow) arrow.textContent = sortDirection === 1 ? "↑" : "↓";
     });
+
+    els.sortSelect.value = sortKey;
+    els.sortDirArrow.textContent = sortDirection === 1 ? "↑" : "↓";
+    const direction = sortDirection === 1 ? "ascending" : "descending";
+    els.sortDir.setAttribute("aria-label", `Sort ${direction}. Reverse sort order.`);
+    els.sortDir.title = `${direction === "ascending" ? "Ascending" : "Descending"} — reverse`;
 }
 
-// ── Utilities ───────────────────────────────────────────────
+// ── Filters and state ───────────────────────────────────────
 
-function goToPage(page: number): void {
-    currentPage = page;
-}
-
-function resetPagination(): void {
+function clearAllFilters(): void {
+    els.searchBox.value = "";
+    for (const key of FACET_KEYS) setFacetSelection(key, allSelection());
+    for (const { min, max } of Object.values(rangeInputs)) {
+        min.value = "";
+        max.value = "";
+    }
+    els.excludePlan.checked = false;
     goToPage(1);
     render();
+}
+
+function buildFilterState(): FilterState {
+    return {
+        query: els.searchBox.value,
+        selections: { ...selections },
+        ranges: {
+            context: {
+                min: getRangeValue(rangeInputs.context.min),
+                max: getRangeValue(rangeInputs.context.max),
+            },
+            outputLimit: {
+                min: getRangeValue(rangeInputs.outputLimit.min),
+                max: getRangeValue(rangeInputs.outputLimit.max),
+            },
+            costInput: {
+                min: getRangeValue(rangeInputs.costInput.min),
+                max: getRangeValue(rangeInputs.costInput.max),
+            },
+            costOutput: {
+                min: getRangeValue(rangeInputs.costOutput.min),
+                max: getRangeValue(rangeInputs.costOutput.max),
+            },
+        },
+        excludePlanProviders: els.excludePlan.checked,
+    };
 }
 
 function getRangeValue(input: HTMLInputElement): number | undefined {
     const value = input.value.trim();
     if (value === "") return undefined;
-    const num = Number(value);
-    return isNaN(num) ? undefined : num;
+    const number = Number(value);
+    return Number.isNaN(number) ? undefined : number;
+}
+
+function facetItemsForRows() {
+    return Object.fromEntries(
+        FACET_KEYS.map((key) => [key, facets[key].items]),
+    ) as Record<FacetKey, string[]>;
+}
+
+function populateSortOptions(): void {
+    for (const option of SORT_OPTIONS) {
+        const element = document.createElement("option");
+        element.value = option.key;
+        element.textContent = option.label;
+        els.sortSelect.appendChild(element);
+    }
+}
+
+function defaultSortDirection(key: SortKey): 1 | -1 {
+    return key === "releaseDate" || key === "knowledge" || key === "context" || key === "outputLimit" ? -1 : 1;
+}
+
+function goToPage(page: number): void {
+    currentPage = page;
 }
 
 function captureUrlState(): UrlState {
     return {
-        query: searchBox.value,
+        query: els.searchBox.value,
         selections: { ...selections },
         ranges: {
             context: { min: rangeInputs.context.min.value, max: rangeInputs.context.max.value },
@@ -410,7 +868,7 @@ function captureUrlState(): UrlState {
             costInput: { min: rangeInputs.costInput.min.value, max: rangeInputs.costInput.max.value },
             costOutput: { min: rangeInputs.costOutput.min.value, max: rangeInputs.costOutput.max.value },
         },
-        excludePlan: excludePlanCheckbox.checked,
+        excludePlan: els.excludePlan.checked,
         sort: sortKey,
         direction: sortDirection,
         page: currentPage,
@@ -438,8 +896,6 @@ function syncUrl(): void {
     lastPushedState = state;
 }
 
-// Typing in the search box or a range field refines the current view, so it updates the
-// existing history entry instead of adding one per keystroke.
 function isRefinement(previous: UrlState, next: UrlState): boolean {
     return (
         previous.excludePlan === next.excludePlan &&
@@ -451,48 +907,22 @@ function isRefinement(previous: UrlState, next: UrlState): boolean {
 }
 
 function loadFromURL(): void {
-    applyUrlState(parseUrlState(window.location.search, window.location.hash, facetItems(allRows)));
+    applyUrlState(parseUrlState(window.location.search, window.location.hash, facetItemsForRows()));
 }
 
 function applyUrlState(state: UrlState): void {
-    searchBox.value = state.query;
-    for (const key of FACET_KEYS) facets[key].setSelection(state.selections[key]);
+    els.searchBox.value = state.query;
+    for (const key of FACET_KEYS) setFacetSelection(key, state.selections[key]);
 
     for (const key of RANGE_KEYS) {
         rangeInputs[key].min.value = state.ranges[key].min;
         rangeInputs[key].max.value = state.ranges[key].max;
     }
 
-    excludePlanCheckbox.checked = state.excludePlan;
+    els.excludePlan.checked = state.excludePlan;
     sortKey = state.sort;
     sortDirection = state.direction;
     currentPage = state.page;
-}
-
-function buildFilterState(): FilterState {
-    return {
-        query: searchBox.value,
-        selections: { ...selections },
-        ranges: {
-            context: {
-                min: getRangeValue(rangeInputs.context.min),
-                max: getRangeValue(rangeInputs.context.max),
-            },
-            outputLimit: {
-                min: getRangeValue(rangeInputs.outputLimit.min),
-                max: getRangeValue(rangeInputs.outputLimit.max),
-            },
-            costInput: {
-                min: getRangeValue(rangeInputs.costInput.min),
-                max: getRangeValue(rangeInputs.costInput.max),
-            },
-            costOutput: {
-                min: getRangeValue(rangeInputs.costOutput.min),
-                max: getRangeValue(rangeInputs.costOutput.max),
-            },
-        },
-        excludePlanProviders: excludePlanCheckbox.checked,
-    };
 }
 
 function query<T extends Element>(selector: string): T {
