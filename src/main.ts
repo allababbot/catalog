@@ -206,6 +206,7 @@ function createFacet(
                 canonical.mode === "all" ? true : canonical.mode === "some" ? canonical.values.includes(cb.value) : false;
         }
         facet.selectAllBox.checked = canonical.mode === "all";
+        facet.selectAllBox.indeterminate = canonical.mode === "some";
         facet.toggle.textContent = facetLabel(canonical, facet.labels);
     };
 
