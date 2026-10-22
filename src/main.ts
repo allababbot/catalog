@@ -343,6 +343,14 @@ function bindEvents(): void {
     });
     excludePlanCheckbox.addEventListener("change", resetPagination);
 
+    window.addEventListener("popstate", () => {
+        lastPushedState = null;
+        applyUrlState(parseUrlState(window.location.search, window.location.hash));
+        updateDropdownFromURL();
+        replaceNextUrl = true;
+        render();
+    });
+
     // Dropdown checkbox change handlers
     dropdownContexts.forEach((ctx) => {
         ctx.allCheckboxes.forEach((cb) => {
@@ -519,14 +527,55 @@ function captureUrlState(): UrlState {
     };
 }
 
+let replaceNextUrl = true;
+let lastPushedState: UrlState | null = null;
+
 function syncUrl(): void {
-    const url = buildUrl(captureUrlState(), window.location.pathname);
-    window.history.replaceState({ path: url }, "", url);
+    const replaceOnly = replaceNextUrl;
+    replaceNextUrl = false;
+
+    const state = captureUrlState();
+    const url = buildUrl(state, window.location.pathname);
+    const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (url === current) return;
+
+    if (replaceOnly || (lastPushedState !== null && isRefinement(lastPushedState, state))) {
+        window.history.replaceState({ path: url }, "", url);
+        return;
+    }
+
+    window.history.pushState({ path: url }, "", url);
+    lastPushedState = state;
+}
+
+// Typing in the search box or a range field refines the current view, so it updates the
+// existing history entry instead of adding one per keystroke.
+function isRefinement(previous: UrlState, next: UrlState): boolean {
+    return (
+        previous.excludePlan === next.excludePlan &&
+        previous.sort === next.sort &&
+        previous.direction === next.direction &&
+        previous.page === next.page &&
+        sameValues(previous.providers, next.providers) &&
+        sameValues(previous.families, next.families) &&
+        sameValues(previous.caps, next.caps) &&
+        sameValues(previous.modIn, next.modIn) &&
+        sameValues(previous.modOut, next.modOut)
+    );
+}
+
+function sameValues(a: string[], b: string[]): boolean {
+    if (a.length !== b.length) return false;
+    const sortedA = [...a].sort();
+    const sortedB = [...b].sort();
+    return sortedA.every((value, index) => value === sortedB[index]);
 }
 
 function loadFromURL(): void {
-    const state = parseUrlState(window.location.search, window.location.hash);
+    applyUrlState(parseUrlState(window.location.search, window.location.hash));
+}
 
+function applyUrlState(state: UrlState): void {
     searchBox.value = state.query;
     replaceSet(activeProviders, state.providers);
     replaceSet(activeFamilies, state.families);
