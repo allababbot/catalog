@@ -3,18 +3,23 @@ export interface FilterRange {
     max?: number;
 }
 
-export type Capability = "reasoning" | "tool" | "vision" | "open";
+export const CAPABILITIES = ["reasoning", "tool", "vision", "open"] as const;
 
-export type SortKey =
-    | "provider"
-    | "model"
-    | "context"
-    | "outputLimit"
-    | "costInput"
-    | "costOutput"
-    | "costCacheRead"
-    | "knowledge"
-    | "releaseDate";
+export type Capability = (typeof CAPABILITIES)[number];
+
+export const SORT_KEYS = [
+    "provider",
+    "model",
+    "context",
+    "outputLimit",
+    "costInput",
+    "costOutput",
+    "costCacheRead",
+    "knowledge",
+    "releaseDate",
+] as const;
+
+export type SortKey = (typeof SORT_KEYS)[number];
 
 export interface CatalogJson {
     providers: Record<string, CatalogProvider>;
@@ -76,7 +81,7 @@ export interface FilterState {
     query: string;
     providers: Set<string>;
     families: Set<string>;
-    activeCaps: Set<Capability>;
+    activeCaps: Set<string>;
     activeModalitiesInput: Set<string>;
     activeModalitiesOutput: Set<string>;
     contextRange: FilterRange;

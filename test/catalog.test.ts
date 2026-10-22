@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { filterRows } from "../src/lib/filters";
+import { filterRows, NONE_MARKER } from "../src/lib/filters";
 import { fmtCost, fmtNum } from "../src/lib/format";
 import { normalizeCatalog } from "../src/lib/normalizeCatalog";
 import { sortRows } from "../src/lib/sorting";
@@ -242,6 +242,25 @@ describe("filterRows", () => {
             families: new Set(),
             activeCaps: new Set(),
             activeModalitiesInput: new Set(["audio"]),
+            activeModalitiesOutput: new Set(),
+            contextRange: {},
+            outputLimitRange: {},
+            costInputRange: {},
+            costOutputRange: {},
+            costCacheReadRange: {},
+            excludePlanProviders: false,
+        });
+
+        expect(result).toHaveLength(0);
+    });
+
+    test("returns no rows when a dropdown is set to its empty selection", () => {
+        const result = filterRows(rows, {
+            query: "",
+            providers: new Set(),
+            families: new Set(),
+            activeCaps: new Set([NONE_MARKER]),
+            activeModalitiesInput: new Set(),
             activeModalitiesOutput: new Set(),
             contextRange: {},
             outputLimitRange: {},

@@ -1,8 +1,10 @@
 import { filterRows, NONE_MARKER } from "./lib/filters";
 import { normalizeCatalog } from "./lib/normalizeCatalog";
 import { sortRows } from "./lib/sorting";
+import { buildUrl, parseUrlState, RANGE_KEYS } from "./lib/urlState";
+import type { UrlState } from "./lib/urlState";
 import "./styles.css";
-import type { Capability, CatalogJson, ModelRow, SortKey } from "./types/catalog";
+import type { CatalogJson, ModelRow, SortKey } from "./types/catalog";
 import { renderStats } from "./ui/renderStats";
 import { renderTable } from "./ui/renderTable";
 
@@ -14,7 +16,7 @@ let currentPage = 1;
 let totalPages = 1;
 let sortKey: SortKey = "provider";
 let sortDirection: 1 | -1 = 1;
-const activeCaps = new Set<Capability>();
+const activeCaps = new Set<string>();
 const activeProviders = new Set<string>();
 const activeFamilies = new Set<string>();
 const activeModIn = new Set<string>();
@@ -332,7 +334,6 @@ function bindEvents(): void {
         searchTimer = setTimeout(() => {
             goToPage(1);
             render();
-            updateURL();
         }, 120);
     });
 
@@ -348,17 +349,22 @@ function bindEvents(): void {
             cb.addEventListener("change", () => {
                 goToPage(1);
                 render();
-                updateURL();
             });
         });
     });
 
     pagePrev.addEventListener("click", () => {
-        if (currentPage > 1) goToPage(currentPage - 1);
+        if (currentPage > 1) {
+            goToPage(currentPage - 1);
+            render();
+        }
     });
 
     pageNext.addEventListener("click", () => {
-        if (currentPage < totalPages) goToPage(currentPage + 1);
+        if (currentPage < totalPages) {
+            goToPage(currentPage + 1);
+            render();
+        }
     });
 
     clearBtn.addEventListener("click", () => {
@@ -381,10 +387,6 @@ function bindEvents(): void {
         capToggle.textContent = "all";
         modInToggle.textContent = "all";
         modOutToggle.textContent = "all";
-
-        // Remove all URL params except base path
-        const newUrl = window.location.pathname + (window.location.hash ? window.location.hash : "");
-        window.history.replaceState({ path: newUrl }, "", newUrl);
 
         Object.values(rangeInputs).forEach(({ min, max }) => {
             min.value = "";
@@ -428,6 +430,7 @@ function render(): void {
     renderStats({ providers: statProv, total: statTotal, footInfo }, pageRows, filtered, allRows);
     renderPagination();
     renderSortIndicators();
+    syncUrl();
 }
 
 function renderPagination(): void {
@@ -495,73 +498,56 @@ function getRangeValue(input: HTMLInputElement): number | undefined {
     return isNaN(num) ? undefined : num;
 }
 
-function updateURL(): void {
-    const params = new URLSearchParams();
-    if (searchBox.value) params.set("q", searchBox.value);
-    if (excludePlanCheckbox.checked) params.set("excludePlan", "true");
-    if (activeProviders.size > 0) params.set("providers", [...activeProviders].join(","));
-    if (activeFamilies.size > 0) params.set("families", [...activeFamilies].join(","));
-    if (activeCaps.size > 0) params.set("caps", [...activeCaps].join(","));
-    if (activeModIn.size > 0) params.set("modIn", [...activeModIn].join(","));
-    if (activeModOut.size > 0) params.set("modOut", [...activeModOut].join(","));
-    if (rangeInputs.context.min.value || rangeInputs.context.max.value) {
-        params.set("contextMin", rangeInputs.context.min.value || "");
-        params.set("contextMax", rangeInputs.context.max.value || "");
-    }
-    if (rangeInputs.outputLimit.min.value || rangeInputs.outputLimit.max.value) {
-        params.set("outputLimitMin", rangeInputs.outputLimit.min.value || "");
-        params.set("outputLimitMax", rangeInputs.outputLimit.max.value || "");
-    }
-    if (rangeInputs.costInput.min.value || rangeInputs.costInput.max.value) {
-        params.set("costInputMin", rangeInputs.costInput.min.value || "");
-        params.set("costInputMax", rangeInputs.costInput.max.value || "");
-    }
-    if (rangeInputs.costOutput.min.value || rangeInputs.costOutput.max.value) {
-        params.set("costOutputMin", rangeInputs.costOutput.min.value || "");
-        params.set("costOutputMax", rangeInputs.costOutput.max.value || "");
-    }
-    const newUrl = params.toString() ? `?${params.toString()}#${currentPage}` : window.location.pathname;
-    window.history.replaceState({ path: newUrl }, "", newUrl);
+function captureUrlState(): UrlState {
+    return {
+        query: searchBox.value,
+        providers: [...activeProviders],
+        families: [...activeFamilies],
+        caps: [...activeCaps],
+        modIn: [...activeModIn],
+        modOut: [...activeModOut],
+        ranges: {
+            context: { min: rangeInputs.context.min.value, max: rangeInputs.context.max.value },
+            outputLimit: { min: rangeInputs.outputLimit.min.value, max: rangeInputs.outputLimit.max.value },
+            costInput: { min: rangeInputs.costInput.min.value, max: rangeInputs.costInput.max.value },
+            costOutput: { min: rangeInputs.costOutput.min.value, max: rangeInputs.costOutput.max.value },
+        },
+        excludePlan: excludePlanCheckbox.checked,
+        sort: sortKey,
+        direction: sortDirection,
+        page: currentPage,
+    };
+}
+
+function syncUrl(): void {
+    const url = buildUrl(captureUrlState(), window.location.pathname);
+    window.history.replaceState({ path: url }, "", url);
 }
 
 function loadFromURL(): void {
-    const params = new URLSearchParams(window.location.search);
-    const hash = window.location.hash.slice(1);
-    if (hash) {
-        const page = parseInt(hash, 10);
-        if (!isNaN(page) && page > 0) {
-            currentPage = page;
-        }
+    const state = parseUrlState(window.location.search, window.location.hash);
+
+    searchBox.value = state.query;
+    replaceSet(activeProviders, state.providers);
+    replaceSet(activeFamilies, state.families);
+    replaceSet(activeCaps, state.caps);
+    replaceSet(activeModIn, state.modIn);
+    replaceSet(activeModOut, state.modOut);
+
+    for (const key of RANGE_KEYS) {
+        rangeInputs[key].min.value = state.ranges[key].min;
+        rangeInputs[key].max.value = state.ranges[key].max;
     }
 
-    const loadCheckboxSet = (param: string, targetSet: Set<string>) => {
-        const value = params.get(param);
-        if (value) {
-            const items = value.split(",");
-            items.forEach((item) => {
-                if (item) targetSet.add(item.trim());
-            });
-        }
-    };
+    excludePlanCheckbox.checked = state.excludePlan;
+    sortKey = state.sort;
+    sortDirection = state.direction;
+    currentPage = state.page;
+}
 
-    loadCheckboxSet("providers", activeProviders);
-    loadCheckboxSet("families", activeFamilies);
-    loadCheckboxSet("caps", activeCaps);
-    loadCheckboxSet("modIn", activeModIn);
-    loadCheckboxSet("modOut", activeModOut);
-
-    if (params.get("excludePlan") === "true") {
-        excludePlanCheckbox.checked = true;
-    }
-
-    if (params.has("contextMin")) rangeInputs.context.min.value = params.get("contextMin") || "";
-    if (params.has("contextMax")) rangeInputs.context.max.value = params.get("contextMax") || "";
-    if (params.has("outputLimitMin")) rangeInputs.outputLimit.min.value = params.get("outputLimitMin") || "";
-    if (params.has("outputLimitMax")) rangeInputs.outputLimit.max.value = params.get("outputLimitMax") || "";
-    if (params.has("costInputMin")) rangeInputs.costInput.min.value = params.get("costInputMin") || "";
-    if (params.has("costInputMax")) rangeInputs.costInput.max.value = params.get("costInputMax") || "";
-    if (params.has("costOutputMin")) rangeInputs.costOutput.min.value = params.get("costOutputMin") || "";
-    if (params.has("costOutputMax")) rangeInputs.costOutput.max.value = params.get("costOutputMax") || "";
+function replaceSet(target: Set<string>, values: string[]): void {
+    target.clear();
+    for (const value of values) target.add(value);
 }
 
 function updateDropdownFromURL(): void {

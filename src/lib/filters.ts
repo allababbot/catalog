@@ -42,8 +42,12 @@ export function filterRows(rows: ModelRow[], filters: FilterState): ModelRow[] {
             return false;
         }
 
-        for (const cap of filters.activeCaps) {
-            if (!capabilityChecks[cap](row)) return false;
+        if (filters.activeCaps.size > 0) {
+            if (filters.activeCaps.has(NONE_MARKER)) return false;
+            for (const cap of filters.activeCaps) {
+                const check = capabilityChecks[cap as Capability];
+                if (!check || !check(row)) return false;
+            }
         }
 
         if (filters.activeModalitiesInput.size > 0) {
