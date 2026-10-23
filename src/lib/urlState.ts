@@ -1,6 +1,6 @@
 import { SORT_KEYS } from "../types/catalog";
 import type { SortKey } from "../types/catalog";
-import { decodeSelection, encodeSelection } from "./selection";
+import { decodeSelection, encodeSelection, sameSelection } from "./selection";
 import type { Selection } from "../types/selection";
 import { allSelections } from "./facets";
 import { FACET_KEYS } from "../types/facets";
@@ -122,4 +122,16 @@ export function buildUrl(state: UrlState, pathname: string): string {
 function splitList(value: string | null): string[] {
     if (!value) return [];
     return [...new Set(value.split(",").map((item) => item.trim()).filter(Boolean))];
+}
+
+/** Whether the next view state is a refinement of the previous one. */
+export function isRefinement(previous: UrlState, next: UrlState): boolean {
+    return (
+        previous.excludePlan === next.excludePlan &&
+        previous.excludeChina === next.excludeChina &&
+        previous.sort === next.sort &&
+        previous.direction === next.direction &&
+        previous.page === next.page &&
+        FACET_KEYS.every((key) => sameSelection(previous.selections[key], next.selections[key]))
+    );
 }

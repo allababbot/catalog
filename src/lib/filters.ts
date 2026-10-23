@@ -1,4 +1,6 @@
-import { matchesFacets } from "./facets";
+import { allSelections, matchesFacets } from "./facets";
+import { FACETS } from "../types/facets";
+import type { FacetItems } from "../types/facets";
 import type { FilterRange, FilterState } from "../types/filter";
 import type { ModelRow } from "../types/catalog";
 
@@ -33,31 +35,44 @@ export function filterRows(rows: ModelRow[], filters: FilterState): ModelRow[] {
         if (hasRange(filters.ranges.costInput) && !inRange(row.costInput, filters.ranges.costInput)) return false;
         if (hasRange(filters.ranges.costOutput) && !inRange(row.costOutput, filters.ranges.costOutput)) return false;
 
-        if (filters.excludePlanProviders) {
-            const normalizedProvider = row.provider.toLowerCase();
-            if (
-                normalizedProvider.includes("plan") ||
-                normalizedProvider.includes("gitlab duo") ||
-                normalizedProvider.includes("kimi for coding") ||
-                normalizedProvider.includes("opencode go")
-            )
-                return false;
-        }
+        if (filters.excludePlanProviders && isPlanProvider(row.provider)) return false;
 
-        if (filters.excludeChinaRegion) {
-            const providerDoc = row.providerDoc.toLowerCase();
-            if (
-                providerDoc.includes(".cn") ||
-                providerDoc.includes("developer.amd.com.cn") ||
-                providerDoc.includes("baidu.com") ||
-                providerDoc.includes("aliyun.com") ||
-                providerDoc.includes("tencent.com") ||
-                providerDoc.includes("huawei.com") ||
-                providerDoc.includes("voltage.cn")
-            )
-                return false;
-        }
+        if (filters.excludeChinaRegion && isChinaRegion(row.providerDoc)) return false;
 
         return true;
     });
+}
+
+/** The facet items still present in the rows that match all non-facet filters. */
+export function availableFacetItems(rows: ModelRow[], state: FilterState): FacetItems {
+    const availableState: FilterState = { ...state, selections: allSelections() };
+    const availableRows = filterRows(rows, availableState);
+    return Object.fromEntries(
+        FACETS.map((facet) => [facet.key, facet.items(availableRows)]),
+    ) as FacetItems;
+}
+
+/** Whether the provider name names a plan or coding-tool provider. */
+export function isPlanProvider(provider: string): boolean {
+    const normalizedProvider = provider.toLowerCase();
+    return (
+        normalizedProvider.includes("plan") ||
+        normalizedProvider.includes("gitlab duo") ||
+        normalizedProvider.includes("kimi for coding") ||
+        normalizedProvider.includes("opencode go")
+    );
+}
+
+/** Whether the provider doc points at a China-region host. */
+export function isChinaRegion(providerDoc: string): boolean {
+    const doc = providerDoc.toLowerCase();
+    return (
+        doc.includes(".cn") ||
+        doc.includes("developer.amd.com.cn") ||
+        doc.includes("baidu.com") ||
+        doc.includes("aliyun.com") ||
+        doc.includes("tencent.com") ||
+        doc.includes("huawei.com") ||
+        doc.includes("voltage.cn")
+    );
 }

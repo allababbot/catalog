@@ -72,7 +72,14 @@ export function coversAll(selection: Selection, values: string[]): boolean {
     return selection.values.every((value) => values.includes(value));
 }
 
-/** What the selection means, for the UI to word in its own way. */
+/** Whether the selection admits the given value. */
+export function isSelected(selection: Selection, value: string): boolean {
+    if (selection.mode === "all") return true;
+    if (selection.mode === "none") return false;
+    return selection.values.includes(value);
+}
+
+/** What a selection means, for the UI to word in its own way. */
 export function describeSelection(selection: Selection): SelectionDescription {
     if (selection.mode === "all") return { kind: "all" };
     if (selection.mode === "none") return { kind: "none" };

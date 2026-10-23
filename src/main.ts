@@ -1,10 +1,11 @@
-import { filterRows } from "./lib/filters";
+import { availableFacetItems, filterRows } from "./lib/filters";
 import { allSelections } from "./lib/facets";
 import { fmtNum, fmtPrice } from "./lib/format";
 import { normalizeCatalog } from "./lib/normalizeCatalog";
 import { sortRows } from "./lib/sorting";
-import { allSelection, canonicalize, noneSelection, sameSelection, someSelection, toggleValue } from "./lib/selection";
-import { buildUrl, DEFAULT_DIRECTION, DEFAULT_SORT, parseUrlState } from "./lib/urlState";
+import { pageCount, pageWindow } from "./lib/pagination";
+import { allSelection, canonicalize, isSelected, noneSelection, someSelection, toggleValue } from "./lib/selection";
+import { buildUrl, DEFAULT_DIRECTION, DEFAULT_SORT, isRefinement, parseUrlState } from "./lib/urlState";
 import type { UrlState } from "./lib/urlState";
 import "./styles.css";
 import type { CatalogJson, ModelRow, SortKey } from "./types/catalog";
@@ -394,8 +395,7 @@ function renderFacetItems(): void {
         const box = document.createElement("input");
         box.type = "checkbox";
         box.value = item;
-        box.checked =
-            selection.mode === "all" || (selection.mode === "some" && selection.values.includes(item));
+        box.checked = isSelected(selection, item);
 
         const text = document.createElement("span");
         text.textContent = label;
@@ -404,23 +404,8 @@ function renderFacetItems(): void {
             if (activeFacet === null) return;
             const selection = selections[activeFacet];
             const allItems = control.definition.items(allRows);
-            
-            // When in "all" mode:
-            // - checking an item: stay in "all" (nothing changes)
-            // - unchecking an item: switch to "some" with all items except the unchecked one
-            // When in "some" or "none" mode: use toggleValue normally
-            let next: Selection;
-            if (selection.mode === "all") {
-                if (box.checked) {
-                    // Already all selected, checking does nothing
-                    next = selection;
-                } else {
-                    // Unchecking from "all": select everything except this item
-                    next = canonicalize(someSelection(allItems.filter((i) => i !== item)), allItems);
-                }
-            } else {
-                next = toggleValue(selection, item, box.checked, allItems);
-            }
+
+            const next = toggleValue(selection, item, box.checked, allItems);
 
             setFacetSelection(activeFacet, next);
             syncFacetItemBoxes();
@@ -457,7 +442,7 @@ function syncFacetItemBoxes(): void {
     const selection = selections[activeFacet];
 
     for (const box of els.facetMenuList.querySelectorAll<HTMLInputElement>("input[type=checkbox]")) {
-        box.checked = selection.mode === "all" || (selection.mode === "some" && selection.values.includes(box.value));
+        box.checked = isSelected(selection, box.value);
     }
 }
 
@@ -601,7 +586,7 @@ function render(): void {
     const filtered = filterRows(allRows, buildFilterState());
     const sorted = sortRows(filtered, sortKey, sortDirection);
 
-    totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+    totalPages = pageCount(sorted.length, PAGE_SIZE);
     if (currentPage > totalPages) currentPage = totalPages;
 
     const start = (currentPage - 1) * PAGE_SIZE;
@@ -786,14 +771,7 @@ function renderPagination(): void {
         return;
     }
 
-    const pages: (number | "ellipsis-start" | "ellipsis-end")[] = [1];
-    const startPage = Math.max(2, currentPage - PAGE_WINDOW);
-    const endPage = Math.min(totalPages - 1, currentPage + PAGE_WINDOW);
-
-    if (startPage > 2) pages.push("ellipsis-start");
-    for (let page = startPage; page <= endPage; page += 1) pages.push(page);
-    if (endPage < totalPages - 1) pages.push("ellipsis-end");
-    pages.push(totalPages);
+    const pages = pageWindow(currentPage, totalPages, PAGE_WINDOW);
 
     els.pageNumbers.innerHTML = pages
         .map((page) => {
@@ -885,17 +863,7 @@ function getRangeValue(input: HTMLInputElement): number | undefined {
 }
 
 function facetItemsForRows() {
-    // Compute facet items from rows that match all filters EXCEPT facet selections
-    // and range filters, so dropdowns show only relevant items.
-    const baseState = buildFilterState();
-    // Keep all facet selections as "all" so we get all items from matching rows
-    const rowsForFacets = filterRows(allRows, {
-        ...baseState,
-        selections: allSelections(),
-    });
-    return Object.fromEntries(
-        FACET_KEYS.map((key) => [key, facets[key].definition.items(rowsForFacets)]),
-    ) as Record<FacetKey, string[]>;
+    return availableFacetItems(allRows, buildFilterState());
 }
 
 function updateFacetItemCounts(): void {
@@ -981,16 +949,6 @@ function syncUrl(): void {
     lastPushedState = state;
 }
 
-function isRefinement(previous: UrlState, next: UrlState): boolean {
-    return (
-        previous.excludePlan === next.excludePlan &&
-        previous.excludeChina === next.excludeChina &&
-        previous.sort === next.sort &&
-        previous.direction === next.direction &&
-        previous.page === next.page &&
-        FACET_KEYS.every((key) => sameSelection(previous.selections[key], next.selections[key]))
-    );
-}
 
 function loadFromURL(): void {
     applyUrlState(parseUrlState(window.location.search, window.location.hash, facetItemsForRows()));
