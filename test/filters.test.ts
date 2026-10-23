@@ -60,6 +60,7 @@ function filterState(overrides: Partial<FilterState> = {}): FilterState {
         selections: selections({}),
         ranges: { context: {}, outputLimit: {}, costInput: {}, costOutput: {} },
         excludePlanProviders: false,
+        excludeChinaRegion: false,
         ...overrides,
     };
 }
@@ -153,6 +154,17 @@ describe("filterRows", () => {
         expect(result.map((row) => row.model)).toEqual(["Llama 4 Scout"]);
     });
 
+    test("excludes OpenCode Go when asked", () => {
+        const withOpencode: ModelRow[] = [
+            { ...rows[0], provider: "OpenCode Go" },
+            { ...rows[1] },
+        ];
+
+        const result = filterRows(withOpencode, filterState({ excludePlanProviders: true }));
+
+        expect(result.map((row) => row.model)).toEqual(["Llama 4 Scout"]);
+    });
+
     test("leaves plan providers in place by default", () => {
         const withPlan: ModelRow[] = [
             { ...rows[0], provider: "Plan Provider" },
@@ -160,6 +172,26 @@ describe("filterRows", () => {
         ];
 
         expect(filterRows(withPlan, filterState())).toHaveLength(2);
+    });
+
+    test("excludes China region providers when asked", () => {
+        const withChina: ModelRow[] = [
+            { ...rows[0], provider: "AMD China", providerDoc: "https://developer.amd.com.cn/radeon/tokenfactory" },
+            { ...rows[1] },
+        ];
+
+        const result = filterRows(withChina, filterState({ excludeChinaRegion: true }));
+
+        expect(result.map((row) => row.model)).toEqual(["Llama 4 Scout"]);
+    });
+
+    test("leaves China region providers in place by default", () => {
+        const withChina: ModelRow[] = [
+            { ...rows[0], provider: "AMD China", providerDoc: "https://developer.amd.com.cn/radeon/tokenfactory" },
+            { ...rows[1] },
+        ];
+
+        expect(filterRows(withChina, filterState())).toHaveLength(2);
     });
 });
 

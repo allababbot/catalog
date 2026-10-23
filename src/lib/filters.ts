@@ -38,7 +38,22 @@ export function filterRows(rows: ModelRow[], filters: FilterState): ModelRow[] {
             if (
                 normalizedProvider.includes("plan") ||
                 normalizedProvider.includes("gitlab duo") ||
-                normalizedProvider.includes("kimi for coding")
+                normalizedProvider.includes("kimi for coding") ||
+                normalizedProvider.includes("opencode go")
+            )
+                return false;
+        }
+
+        if (filters.excludeChinaRegion) {
+            const providerDoc = row.providerDoc.toLowerCase();
+            if (
+                providerDoc.includes(".cn") ||
+                providerDoc.includes("developer.amd.com.cn") ||
+                providerDoc.includes("baidu.com") ||
+                providerDoc.includes("aliyun.com") ||
+                providerDoc.includes("tencent.com") ||
+                providerDoc.includes("huawei.com") ||
+                providerDoc.includes("voltage.cn")
             )
                 return false;
         }

@@ -19,4 +19,5 @@ export interface FilterState {
     selections: Record<FacetKey, Selection>;
     ranges: Record<RangeKey, FilterRange>;
     excludePlanProviders: boolean;
+    excludeChinaRegion: boolean;
 }

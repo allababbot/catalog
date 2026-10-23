@@ -510,7 +510,7 @@ h1 {
     align-items: center;
     gap: 5px;
     height: var(--control-height);
-    padding: 0 24px 0 10px;
+    padding: 0 28px 0 10px;
     border: 1px solid var(--control);
     border-radius: var(--radius-control);
     background: var(--surface);
@@ -524,7 +524,7 @@ h1 {
 .filter-button::after {
     content: "";
     position: absolute;
-    right: 10px;
+    right: 12px;
     top: 50%;
     width: 5px;
     height: 5px;
@@ -863,6 +863,7 @@ h1 {
     flex-wrap: wrap;
     gap: 6px;
     margin-top: 12px;
+    max-width: 100%;
 }
 
 .chip {
@@ -878,6 +879,10 @@ h1 {
     font-size: var(--fs-small);
     line-height: 1;
     white-space: nowrap;
+    flex: 0 0 auto;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
     transition:
         border-color var(--t-hover) var(--ease),
         background-color var(--t-hover) var(--ease);
@@ -899,6 +904,7 @@ h1 {
     border-radius: 3px;
     background: transparent;
     color: var(--faint);
+    flex: none;
 }
 
 .chip:hover .chip-remove {
@@ -918,6 +924,7 @@ h1 {
     padding: 0 9px;
     color: var(--muted);
     font-variant-numeric: tabular-nums;
+    flex: 0 0 auto;
 }
 
 .clear-filters {
@@ -929,6 +936,8 @@ h1 {
     color: var(--muted);
     font-size: var(--fs-small);
     text-underline-offset: 3px;
+    flex: 0 0 auto;
+    margin-left: auto;
 }
 
 .clear-filters:hover {
@@ -944,6 +953,7 @@ h1 {
     justify-content: space-between;
     gap: 16px;
     margin: 22px 0 8px;
+    flex-wrap: wrap;
 }
 
 .results-summary {

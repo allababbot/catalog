@@ -70,6 +70,7 @@ const els = {
     retryBtn: query<HTMLButtonElement>("#retryBtn"),
     themeToggle: query<HTMLButtonElement>("#themeToggle"),
     excludePlan: query<HTMLInputElement>("#excludePlan"),
+    excludeChina: query<HTMLInputElement>("#excludeChina"),
     pagePrev: query<HTMLButtonElement>("#pagePrev"),
     pageNext: query<HTMLButtonElement>("#pageNext"),
     pageNumbers: query<HTMLElement>("#pageNumbers"),
@@ -273,6 +274,12 @@ function summaryFor(definition: FacetEntry, selection: Selection, items: string[
     return `${selection.values.length} of ${items.length}`;
 }
 
+function selectedCount(selection: Selection): number {
+    if (selection.mode === "all") return -1;
+    if (selection.mode === "none") return 0;
+    return selection.values.length;
+}
+
 function updateFacetButtons(): void {
     if (!facets) return;
     for (const key of FACET_KEYS) updateFacetButton(facets[key]);
@@ -280,7 +287,9 @@ function updateFacetButtons(): void {
 
 function setFacetSelection(key: FacetKey, selection: Selection): void {
     const control = facets[key];
-    selections[key] = canonicalize(selection, control.items);
+    // Canonicalize against the full item list to ensure proper mode transitions
+    const allItems = control.definition.items(allRows);
+    selections[key] = canonicalize(selection, allItems);
     updateFacetButton(control);
 }
 
@@ -301,7 +310,15 @@ function openFacet(key: FacetKey | null): void {
     els.facetMenuSearch.placeholder = `Find ${control.definition.label.toLowerCase()}`;
     els.facetMenuSearch.setAttribute("aria-label", `Find a ${control.definition.label.toLowerCase()}`);
     els.facetSearchWrap.hidden = control.items.length <= 10;
-    els.facetAllLabel.textContent = `All items (${control.items.length.toLocaleString("en-US")})`;
+    
+    // Show total available items (from full catalog) vs currently filtered items
+    const allItems = control.definition.items(allRows);
+    const filteredItems = control.items;
+    if (filteredItems.length < allItems.length) {
+        els.facetAllLabel.textContent = `${filteredItems.length} of ${allItems.length} items available`;
+    } else {
+        els.facetAllLabel.textContent = `All items (${filteredItems.length.toLocaleString("en-US")})`;
+    }
 
     renderFacetItems();
     syncFacetAll();
@@ -386,12 +403,25 @@ function renderFacetItems(): void {
         box.addEventListener("change", () => {
             if (activeFacet === null) return;
             const selection = selections[activeFacet];
-            // With every item selected, clicking one is meant to narrow the view to it,
-            // not to drop it from a list of 231 other providers.
-            const next =
-                selection.mode === "all"
-                    ? canonicalize(someSelection([item]), control.items)
-                    : toggleValue(selection, item, box.checked, control.items);
+            const allItems = control.definition.items(allRows);
+            
+            // When in "all" mode:
+            // - checking an item: stay in "all" (nothing changes)
+            // - unchecking an item: switch to "some" with all items except the unchecked one
+            // When in "some" or "none" mode: use toggleValue normally
+            let next: Selection;
+            if (selection.mode === "all") {
+                if (box.checked) {
+                    // Already all selected, checking does nothing
+                    next = selection;
+                } else {
+                    // Unchecking from "all": select everything except this item
+                    next = canonicalize(someSelection(allItems.filter((i) => i !== item)), allItems);
+                }
+            } else {
+                next = toggleValue(selection, item, box.checked, allItems);
+            }
+
             setFacetSelection(activeFacet, next);
             syncFacetItemBoxes();
             syncFacetAll();
@@ -456,6 +486,11 @@ function bindEvents(): void {
     }
 
     els.excludePlan.addEventListener("change", () => {
+        goToPage(1);
+        render();
+    });
+
+    els.excludeChina.addEventListener("change", () => {
         goToPage(1);
         render();
     });
@@ -593,6 +628,7 @@ function render(): void {
         Math.min(start + PAGE_SIZE, sorted.length),
     );
 
+    updateFacetItemCounts();
     renderActiveFilters();
     renderPagination();
     renderSortIndicators();
@@ -623,9 +659,10 @@ function renderActiveFilters(): void {
             const shown = selection.values.slice(0, 3);
             for (const value of shown) {
                 const label = control.definition.itemLabels[value] ?? value;
+                const allItems = control.definition.items(allRows);
                 chips.push(
                     makeChip(`${control.definition.label}: ${label}`, () => {
-                        setFacetSelection(key, toggleValue(selections[key], value, false, control.items));
+                        setFacetSelection(key, toggleValue(selections[key], value, false, allItems));
                         goToPage(1);
                         render();
                     }),
@@ -655,6 +692,16 @@ function renderActiveFilters(): void {
             chips.push(
                 makeChip("Plans excluded", () => {
                     els.excludePlan.checked = false;
+                    goToPage(1);
+                    render();
+                }),
+            );
+        }
+
+        if (els.excludeChina.checked) {
+            chips.push(
+                makeChip("China region excluded", () => {
+                    els.excludeChina.checked = false;
                     goToPage(1);
                     render();
                 }),
@@ -798,6 +845,7 @@ function clearAllFilters(): void {
         max.value = "";
     }
     els.excludePlan.checked = false;
+    els.excludeChina.checked = false;
     goToPage(1);
     render();
 }
@@ -825,6 +873,7 @@ function buildFilterState(): FilterState {
             },
         },
         excludePlanProviders: els.excludePlan.checked,
+        excludeChinaRegion: els.excludeChina.checked,
     };
 }
 
@@ -836,9 +885,44 @@ function getRangeValue(input: HTMLInputElement): number | undefined {
 }
 
 function facetItemsForRows() {
+    // Compute facet items from rows that match all filters EXCEPT facet selections
+    // and range filters, so dropdowns show only relevant items.
+    const baseState = buildFilterState();
+    // Keep all facet selections as "all" so we get all items from matching rows
+    const rowsForFacets = filterRows(allRows, {
+        ...baseState,
+        selections: allSelections(),
+    });
     return Object.fromEntries(
-        FACET_KEYS.map((key) => [key, facets[key].items]),
+        FACET_KEYS.map((key) => [key, facets[key].definition.items(rowsForFacets)]),
     ) as Record<FacetKey, string[]>;
+}
+
+function updateFacetItemCounts(): void {
+    if (!facets || !initialized) return;
+
+    const itemsFromFiltered = facetItemsForRows();
+
+    for (const key of FACET_KEYS) {
+        const control = facets[key];
+        const allItems = control.definition.items(allRows);
+        const filteredItems = itemsFromFiltered[key];
+        const selection = selections[key];
+
+        // Update the stored items to reflect current filters
+        control.items = filteredItems;
+
+        // Update button text to show filtered count if different from total
+        if (filteredItems.length < allItems.length) {
+            const summary = summaryFor(control.definition, selection, filteredItems);
+            const selCount = selection.mode === "all" ? -1 : selection.mode === "none" ? 0 : selection.values.length;
+            control.value.textContent = selCount > 0
+                ? `${summary} (${filteredItems.length} available)`
+                : `${filteredItems.length} of ${allItems.length}`;
+        } else {
+            updateFacetButton(control);
+        }
+    }
 }
 
 function populateSortOptions(): void {
@@ -869,6 +953,7 @@ function captureUrlState(): UrlState {
             costOutput: { min: rangeInputs.costOutput.min.value, max: rangeInputs.costOutput.max.value },
         },
         excludePlan: els.excludePlan.checked,
+        excludeChina: els.excludeChina.checked,
         sort: sortKey,
         direction: sortDirection,
         page: currentPage,
@@ -899,6 +984,7 @@ function syncUrl(): void {
 function isRefinement(previous: UrlState, next: UrlState): boolean {
     return (
         previous.excludePlan === next.excludePlan &&
+        previous.excludeChina === next.excludeChina &&
         previous.sort === next.sort &&
         previous.direction === next.direction &&
         previous.page === next.page &&
@@ -920,6 +1006,7 @@ function applyUrlState(state: UrlState): void {
     }
 
     els.excludePlan.checked = state.excludePlan;
+    els.excludeChina.checked = state.excludeChina;
     sortKey = state.sort;
     sortDirection = state.direction;
     currentPage = state.page;

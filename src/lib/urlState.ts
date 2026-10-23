@@ -18,6 +18,7 @@ export interface UrlState {
     selections: Record<FacetKey, Selection>;
     ranges: Record<RangeKey, UrlRange>;
     excludePlan: boolean;
+    excludeChina: boolean;
     sort: SortKey;
     direction: 1 | -1;
     page: number;
@@ -44,6 +45,7 @@ export function createDefaultUrlState(): UrlState {
             costOutput: { min: "", max: "" },
         },
         excludePlan: false,
+        excludeChina: false,
         sort: DEFAULT_SORT,
         direction: DEFAULT_DIRECTION,
         page: 1,
@@ -69,6 +71,7 @@ export function parseUrlState(search: string, hash: string, items: FacetItems): 
     }
 
     state.excludePlan = params.get("excludePlan") === "true";
+    state.excludeChina = params.get("excludeChina") === "true";
 
     const sort = params.get("sort");
     const hasSort = sort !== null && isSortKey(sort);
@@ -102,6 +105,7 @@ export function buildUrl(state: UrlState, pathname: string): string {
     }
 
     if (state.excludePlan) params.set("excludePlan", "true");
+    if (state.excludeChina) params.set("excludeChina", "true");
     if (state.sort !== DEFAULT_SORT) {
         params.set("sort", state.sort);
         params.set("dir", state.direction === -1 ? "desc" : "asc");
