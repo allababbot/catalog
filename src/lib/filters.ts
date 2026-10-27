@@ -25,6 +25,7 @@ export function filterRows(rows: ModelRow[], filters: FilterState): ModelRow[] {
             query &&
             !row.provider.toLowerCase().includes(query) &&
             !row.model.toLowerCase().includes(query) &&
+            !row.modelId.toLowerCase().includes(query) &&
             !row.family.toLowerCase().includes(query)
         ) {
             return false;
@@ -37,7 +38,8 @@ export function filterRows(rows: ModelRow[], filters: FilterState): ModelRow[] {
 
         if (filters.excludePlanProviders && isPlanProvider(row.provider)) return false;
 
-        if (filters.excludeChinaRegion && isChinaRegion(row.providerDoc)) return false;
+        if (filters.excludeChinaRegion && isChinaRegion(row)) return false;
+
 
         return true;
     });
@@ -63,9 +65,17 @@ export function isPlanProvider(provider: string): boolean {
     );
 }
 
-/** Whether the provider doc points at a China-region host. */
-export function isChinaRegion(providerDoc: string): boolean {
-    const doc = providerDoc.toLowerCase();
+/**
+ * Whether the row's provider serves the China region: its name says so ("(China)",
+ * "minimax.cn"), its id carries a `cn` segment ("alibaba-cn"), or its doc points at a
+ * China-region host.
+ */
+export function isChinaRegion(row: Pick<ModelRow, "provider" | "providerId" | "providerDoc">): boolean {
+    const name = row.provider.toLowerCase();
+    if (name.includes("(china)") || name.includes(".cn")) return true;
+    if (/(^|-)cn(-|$)/.test(row.providerId.toLowerCase())) return true;
+
+    const doc = row.providerDoc.toLowerCase();
     return (
         doc.includes(".cn") ||
         doc.includes("developer.amd.com.cn") ||

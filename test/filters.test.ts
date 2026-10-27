@@ -203,6 +203,25 @@ describe("filterRows", () => {
         expect(result.map((row) => row.model)).toEqual(["Llama 4 Scout"]);
     });
 
+    test("excludes providers whose name or id marks the China region", () => {
+        const withChina: ModelRow[] = [
+            { ...rows[0], provider: "Alibaba (China)", providerId: "alibaba", providerDoc: "https://www.alibabacloud.com/help" },
+            { ...rows[0], provider: "MiniMax (minimax.cn)", providerId: "minimax", providerDoc: "https://platform.minimaxi.com" },
+            { ...rows[0], provider: "MiniMax Coding", providerId: "minimax-cn-coding-plan", providerDoc: "https://platform.minimaxi.com" },
+            { ...rows[1] },
+        ];
+
+        const result = filterRows(withChina, filterState({ excludeChinaRegion: true }));
+
+        expect(result.map((row) => row.model)).toEqual(["Llama 4 Scout"]);
+    });
+
+    test("does not take a cn inside a word for the China region", () => {
+        const lookalike: ModelRow[] = [{ ...rows[0], provider: "Cncf Cloud", providerId: "cncf-cloud" }];
+
+        expect(filterRows(lookalike, filterState({ excludeChinaRegion: true }))).toHaveLength(1);
+    });
+
     test("leaves China region providers in place by default", () => {
         const withChina: ModelRow[] = [
             { ...rows[0], provider: "AMD China", providerDoc: "https://developer.amd.com.cn/radeon/tokenfactory" },
@@ -240,6 +259,12 @@ describe("query filter", () => {
         expect(filterRows(rows, filterState({ query: "GEMINI" }))).toHaveLength(0);
         expect(filterRows(rows, filterState({ query: "llama" })).map((row) => row.model)).toEqual(["Llama 4 Scout"]);
         expect(filterRows(rows, filterState({ query: "openai" })).map((row) => row.model)).toEqual(["GPT-5"]);
+    });
+
+    test("matches the model API id", () => {
+        const withId: ModelRow[] = [{ ...rows[0], modelId: "gpt-5-2025-08-07" }, rows[1]];
+
+        expect(filterRows(withId, filterState({ query: "2025-08-07" })).map((row) => row.model)).toEqual(["GPT-5"]);
     });
 
     test("trims the query before matching", () => {

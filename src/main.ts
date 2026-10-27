@@ -261,10 +261,14 @@ function createFacetControl(definition: FacetEntry, items: string[]): FacetContr
 
 function updateFacetButton(control: FacetControl): void {
     const selection = selections[control.definition.key];
-    const summary = summaryFor(control.definition, selection, control.items);
-    control.value.textContent = summary;
+    setFacetButtonText(control, summaryFor(control.definition, selection, control.items));
     control.button.dataset.active = String(selection.mode !== "all");
-    control.button.setAttribute("aria-label", `${control.definition.label}: ${summary}`);
+}
+
+/** What a facet button says, shown and announced alike. */
+function setFacetButtonText(control: FacetControl, text: string): void {
+    control.value.textContent = text;
+    control.button.setAttribute("aria-label", `${control.definition.label}: ${text}`);
 }
 
 function summaryFor(definition: FacetEntry, selection: Selection, items: string[]): string {
@@ -272,12 +276,6 @@ function summaryFor(definition: FacetEntry, selection: Selection, items: string[
     if (selection.mode === "none") return "None";
     if (selection.values.length === 1) return definition.itemLabels[selection.values[0]] ?? selection.values[0];
     return `${selection.values.length} of ${items.length}`;
-}
-
-function selectedCount(selection: Selection): number {
-    if (selection.mode === "all") return -1;
-    if (selection.mode === "none") return 0;
-    return selection.values.length;
 }
 
 function updateFacetButtons(): void {
@@ -458,15 +456,18 @@ function bindEvents(): void {
         }, 140);
     });
 
+    let rangeTimer: ReturnType<typeof setTimeout> | undefined;
+    const onRangeInput = () => {
+        clearTimeout(rangeTimer);
+        rangeTimer = setTimeout(() => {
+            goToPage(1);
+            render();
+        }, 140);
+    };
+
     for (const { min, max } of Object.values(rangeInputs)) {
-        min.addEventListener("input", () => {
-            goToPage(1);
-            render();
-        });
-        max.addEventListener("input", () => {
-            goToPage(1);
-            render();
-        });
+        min.addEventListener("input", onRangeInput);
+        max.addEventListener("input", onRangeInput);
     }
 
     els.excludePlan.addEventListener("change", () => {
@@ -882,10 +883,12 @@ function updateFacetItemCounts(): void {
         // Update button text to show filtered count if different from total
         if (filteredItems.length < allItems.length) {
             const summary = summaryFor(control.definition, selection, filteredItems);
-            const selCount = selection.mode === "all" ? -1 : selection.mode === "none" ? 0 : selection.values.length;
-            control.value.textContent = selCount > 0
-                ? `${summary} (${filteredItems.length} available)`
-                : `${filteredItems.length} of ${allItems.length}`;
+            setFacetButtonText(
+                control,
+                selection.mode === "some"
+                    ? `${summary} (${filteredItems.length} available)`
+                    : `${filteredItems.length} of ${allItems.length}`,
+            );
         } else {
             updateFacetButton(control);
         }
