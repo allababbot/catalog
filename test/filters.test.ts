@@ -293,4 +293,11 @@ describe("query filter", () => {
     test("trims the query before matching", () => {
         expect(filterRows(rows, filterState({ query: "  meta  " })).map((row) => row.model)).toEqual(["Llama 4 Scout"]);
     });
+
+    test("searches modalities, knowledge, and canonical ids", () => {
+        const extra: ModelRow[] = [{ ...rows[0], canonicalId: "openai/gpt-5", knowledge: "2025-01", modalitiesInput: ["image"] }];
+        expect(filterRows(extra, filterState({ query: "openai/gpt-5" })).map((row) => row.model)).toEqual(["GPT-5"]);
+        expect(filterRows(extra, filterState({ query: "image" })).map((row) => row.model)).toEqual(["GPT-5"]);
+        expect(filterRows(extra, filterState({ query: "2025-01" })).map((row) => row.model)).toEqual(["GPT-5"]);
+    });
 });

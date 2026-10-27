@@ -10,7 +10,7 @@ import type { UrlState } from "./lib/urlState";
 import "./styles.css";
 import type { CatalogPayload, ModelRow, SortKey } from "./types/catalog";
 import { FACETS, FACET_KEYS } from "./types/facets";
-import type { FacetEntry, FacetKey } from "./types/facets";
+import type { FacetEntry, FacetItems, FacetKey } from "./types/facets";
 import { RANGE_KEYS } from "./types/filter";
 import type { FilterState, RangeKey } from "./types/filter";
 import type { Selection } from "./types/selection";
@@ -53,6 +53,9 @@ let facets: Record<FacetKey, FacetControl>;
 let canonicalFilter = "";
 /** How many providers offer each canonical model, counted once when the catalog loads. */
 let providerCounts = new Map<string, number>();
+/** Cached facet availability for the current non-selection filters. */
+let cachedFacetKey = "";
+let cachedFacetItems: FacetItems | null = null;
 
 const selections: Record<FacetKey, Selection> = allSelections();
 
@@ -132,6 +135,8 @@ async function loadCatalog(): Promise<void> {
 
         allRows = rows;
         providerCounts = canonicalCounts(rows);
+        cachedFacetKey = "";
+        cachedFacetItems = null;
 
         if (!initialized) {
             buildFacets(rows);
@@ -521,6 +526,22 @@ function bindEvents(): void {
     document.addEventListener("keydown", (event) => {
         if (event.key === "Escape" && activeFacet !== null) {
             closeFacet(true);
+            return;
+        }
+
+        if (event.key !== "Tab" || activeFacet === null || els.facetPopover.hidden) return;
+        const focusable = [...els.facetPopover.querySelectorAll<HTMLElement>("button, input, [tabindex]:not([tabindex='-1'])")].filter(
+            (element) => !element.hasAttribute("disabled") && element.offsetParent !== null,
+        );
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
         }
     });
 
@@ -899,7 +920,22 @@ function getRangeValue(input: HTMLInputElement): number | undefined {
 }
 
 function facetItemsForRows() {
-    return availableFacetItems(allRows, buildFilterState());
+    const state = buildFilterState();
+    // Facet availability ignores selection changes, so the expensive filter only
+    // needs to rerun when the other filters change.
+    const key = JSON.stringify({
+        query: state.query,
+        ranges: state.ranges,
+        excludePlanProviders: state.excludePlanProviders,
+        excludeChinaRegion: state.excludeChinaRegion,
+        excludeDeprecated: state.excludeDeprecated,
+        canonicalId: state.canonicalId,
+    });
+    if (key !== cachedFacetKey || cachedFacetItems === null) {
+        cachedFacetKey = key;
+        cachedFacetItems = availableFacetItems(allRows, state);
+    }
+    return cachedFacetItems;
 }
 
 function updateFacetItemCounts(): void {

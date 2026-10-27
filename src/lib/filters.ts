@@ -1,5 +1,5 @@
 import { allSelections, matchesFacets } from "./facets";
-import { FACETS } from "../types/facets";
+import { CAPABILITIES, FACETS } from "../types/facets";
 import type { FacetItems } from "../types/facets";
 import type { FilterRange, FilterState } from "../types/filter";
 import type { ModelRow } from "../types/catalog";
@@ -21,14 +21,23 @@ export function filterRows(rows: ModelRow[], filters: FilterState): ModelRow[] {
     return rows.filter((row) => {
         if (!matchesFacets(row, filters.selections)) return false;
 
-        if (
-            query &&
-            !row.provider.toLowerCase().includes(query) &&
-            !row.model.toLowerCase().includes(query) &&
-            !row.modelId.toLowerCase().includes(query) &&
-            !row.family.toLowerCase().includes(query)
-        ) {
-            return false;
+        if (query) {
+            const capabilityLabels = CAPABILITIES.filter((capability) => capability.has(row)).map((capability) => capability.label);
+            const haystack = [
+                row.provider,
+                row.model,
+                row.modelId,
+                row.family,
+                row.canonicalId,
+                row.description,
+                row.knowledge,
+                row.modalitiesInput.join(" "),
+                row.modalitiesOutput.join(" "),
+                capabilityLabels.join(" "),
+            ]
+                .join(" ")
+                .toLowerCase();
+            if (!haystack.includes(query)) return false;
         }
 
         if (hasRange(filters.ranges.context) && !inRange(row.context, filters.ranges.context)) return false;

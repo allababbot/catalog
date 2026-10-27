@@ -76,3 +76,35 @@ describe("catalog handler", () => {
         expect((await garbled()).status).toBe(502);
     });
 });
+
+describe("catalog handler resilience", () => {
+    test("serves a stale cached catalog when refresh fails", async () => {
+        let fail = false;
+        let clock = 0;
+        const handler = createCatalogHandler({
+            fetch: async () => (fail ? new Response("down", { status: 503 }) : upstream(UPSTREAM)),
+            now: () => clock,
+        });
+
+        expect((await handler()).status).toBe(200);
+        clock = 300_000;
+        fail = true;
+        const stale = await handler();
+        expect(stale.status).toBe(200);
+        expect(stale.headers.get("X-Catalog-Stale")).toBe("true");
+    });
+
+    test("retries a failing upstream fetch", async () => {
+        let calls = 0;
+        const handler = createCatalogHandler({
+            fetch: async () => {
+                calls += 1;
+                return calls === 1 ? new Response("down", { status: 503 }) : upstream(UPSTREAM);
+            },
+        });
+
+        const response = await handler();
+        expect(response.status).toBe(200);
+        expect(calls).toBe(2);
+    });
+});
