@@ -126,9 +126,15 @@ describe("facet registry", () => {
     test("reads the provider, family, capabilities and modalities off a row", () => {
         expect(facet("providers").read(rows[0])).toEqual(["OpenAI"]);
         expect(facet("families").read(rows[1])).toEqual(["llama"]);
-        expect(facet("caps").read(rows[1])).toEqual(["tool", "open"]);
+        expect(facet("caps").read(rows[1])).toEqual(["tool", "vision", "open"]);
         expect(facet("modIn").read(rows[1])).toEqual(["text", "image"]);
         expect(facet("modOut").read(rows[2])).toEqual(["text", "image"]);
+    });
+
+    test("reads vision off an image input, not off the attachment flag", () => {
+        const attachmentOnly = { ...rows[0], attachment: true, modalitiesInput: ["text", "pdf"] };
+
+        expect(facet("caps").read(attachmentOnly)).not.toContain("vision");
     });
 
     test("reads no family for a row without one", () => {
@@ -150,8 +156,8 @@ describe("facet items", () => {
         expect(facet("families").items(rows)).toEqual(["gpt", "llama"]);
     });
 
-    test("offers the four capabilities whether or not a row carries them", () => {
-        expect(facet("caps").items(rows)).toEqual(["reasoning", "tool", "vision", "open"]);
+    test("offers the five capabilities whether or not a row carries them", () => {
+        expect(facet("caps").items(rows)).toEqual(["reasoning", "tool", "vision", "structured", "open"]);
     });
 
     test("collects modalities from the rows", () => {
@@ -236,7 +242,7 @@ describe("facetItems", () => {
         expect(facetItems(rows)).toEqual({
             providers: ["Google", "Meta", "OpenAI"],
             families: ["gpt", "llama"],
-            caps: ["reasoning", "tool", "vision", "open"],
+            caps: ["reasoning", "tool", "vision", "structured", "open"],
             modIn: ["image", "text"],
             modOut: ["image", "text"],
             releaseYear: ["2024", "2025"],

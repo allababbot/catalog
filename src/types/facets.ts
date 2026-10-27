@@ -24,15 +24,25 @@ export interface FacetDefinition {
     items(rows: ModelRow[]): string[];
 }
 
-/** The four capabilities, in the order the sidebar lists them. */
-const CAPABILITY_ITEMS = ["reasoning", "tool", "vision", "open"];
+/**
+ * The capabilities, in the order the sidebar and the row marks list them: the facet
+ * item, its label, the one-letter mark a row shows, and whether a row has it.
+ */
+export const CAPABILITIES = [
+    { item: "reasoning", label: "Reasoning", mark: "R", has: (row: ModelRow) => row.reasoning },
+    { item: "tool", label: "Tool Call", mark: "T", has: (row: ModelRow) => row.toolCall },
+    // Vision means the model reads images, which models.dev states as an image input
+    // modality; its `attachment` flag is about file attachments and is not vision.
+    { item: "vision", label: "Vision", mark: "V", has: (row: ModelRow) => row.modalitiesInput.includes("image") },
+    { item: "structured", label: "Structured Output", mark: "S", has: (row: ModelRow) => row.structuredOutput },
+    { item: "open", label: "Open Weights", mark: "O", has: (row: ModelRow) => row.openWeights },
+] as const;
 
-const CAPABILITY_LABELS: Record<string, string> = {
-    reasoning: "Reasoning",
-    tool: "Tool Call",
-    vision: "Vision",
-    open: "Open Weights",
-};
+const CAPABILITY_ITEMS: string[] = CAPABILITIES.map((capability) => capability.item);
+
+const CAPABILITY_LABELS: Record<string, string> = Object.fromEntries(
+    CAPABILITIES.map((capability) => [capability.item, capability.label]),
+);
 
 const NO_LABELS: Record<string, string> = {};
 
@@ -40,14 +50,8 @@ const readProvider = (row: ModelRow): string[] => [row.provider];
 
 const readFamily = (row: ModelRow): string[] => (row.family ? [row.family] : []);
 
-const readCapabilities = (row: ModelRow): string[] => {
-    const capabilities: string[] = [];
-    if (row.reasoning) capabilities.push("reasoning");
-    if (row.toolCall) capabilities.push("tool");
-    if (row.attachment) capabilities.push("vision");
-    if (row.openWeights) capabilities.push("open");
-    return capabilities;
-};
+const readCapabilities = (row: ModelRow): string[] =>
+    CAPABILITIES.filter((capability) => capability.has(row)).map((capability) => capability.item);
 
 const readModalityInput = (row: ModelRow): string[] => row.modalitiesInput;
 
@@ -61,7 +65,7 @@ function itemsFrom(read: (row: ModelRow) => string[]): (rows: ModelRow[]) => str
 }
 
 /**
- * The one list of the five facets. Its order is the order of the sidebar.
+ * The one list of the six facets. Its order is the order of the sidebar.
  *
  * The key of a facet is written once, here; `FacetKey` is derived from it.
  */
