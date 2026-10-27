@@ -79,6 +79,7 @@ function filterState(overrides: Partial<FilterState> = {}): FilterState {
         ranges: { context: {}, outputLimit: {}, costInput: {}, costOutput: {} },
         excludePlanProviders: false,
         excludeChinaRegion: false,
+        excludeDeprecated: false,
         ...overrides,
     };
 }
@@ -229,6 +230,15 @@ describe("filterRows", () => {
         ];
 
         expect(filterRows(withChina, filterState())).toHaveLength(2);
+    });
+});
+
+describe("status filters", () => {
+    test("keeps deprecated models unless asked to exclude them", () => {
+        const withDeprecated: ModelRow[] = [{ ...rows[0], status: "deprecated" }, { ...rows[1], status: "beta" }];
+
+        expect(filterRows(withDeprecated, filterState())).toHaveLength(2);
+        expect(filterRows(withDeprecated, filterState({ excludeDeprecated: true })).map((row) => row.model)).toEqual(["Llama 4 Scout"]);
     });
 });
 

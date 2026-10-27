@@ -71,6 +71,7 @@ const els = {
     themeToggle: query<HTMLButtonElement>("#themeToggle"),
     excludePlan: query<HTMLInputElement>("#excludePlan"),
     excludeChina: query<HTMLInputElement>("#excludeChina"),
+    excludeDeprecated: query<HTMLInputElement>("#excludeDeprecated"),
     pagePrev: query<HTMLButtonElement>("#pagePrev"),
     pageNext: query<HTMLButtonElement>("#pageNext"),
     pageNumbers: query<HTMLElement>("#pageNumbers"),
@@ -480,6 +481,11 @@ function bindEvents(): void {
         render();
     });
 
+    els.excludeDeprecated.addEventListener("change", () => {
+        goToPage(1);
+        render();
+    });
+
     els.retryBtn.addEventListener("click", () => {
         void loadCatalog();
     });
@@ -692,6 +698,17 @@ function renderActiveFilters(): void {
                 }),
             );
         }
+
+        if (els.excludeDeprecated.checked) {
+            chips.push(
+                makeChip("Deprecated excluded", () => {
+                    els.excludeDeprecated.checked = false;
+                    goToPage(1);
+                    render();
+                }),
+            );
+        }
+
     }
 
     if (chips.length === 0) {
@@ -824,6 +841,7 @@ function clearAllFilters(): void {
     }
     els.excludePlan.checked = false;
     els.excludeChina.checked = false;
+    els.excludeDeprecated.checked = false;
     goToPage(1);
     render();
 }
@@ -852,6 +870,7 @@ function buildFilterState(): FilterState {
         },
         excludePlanProviders: els.excludePlan.checked,
         excludeChinaRegion: els.excludeChina.checked,
+        excludeDeprecated: els.excludeDeprecated.checked,
     };
 }
 
@@ -924,6 +943,7 @@ function captureUrlState(): UrlState {
         },
         excludePlan: els.excludePlan.checked,
         excludeChina: els.excludeChina.checked,
+        excludeDeprecated: els.excludeDeprecated.checked,
         sort: sortKey,
         direction: sortDirection,
         page: currentPage,
@@ -967,6 +987,7 @@ function applyUrlState(state: UrlState): void {
 
     els.excludePlan.checked = state.excludePlan;
     els.excludeChina.checked = state.excludeChina;
+    els.excludeDeprecated.checked = state.excludeDeprecated;
     sortKey = state.sort;
     sortDirection = state.direction;
     currentPage = state.page;

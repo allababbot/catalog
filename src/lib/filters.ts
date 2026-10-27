@@ -40,6 +40,7 @@ export function filterRows(rows: ModelRow[], filters: FilterState): ModelRow[] {
 
         if (filters.excludeChinaRegion && isChinaRegion(row)) return false;
 
+        if (filters.excludeDeprecated && row.status === "deprecated") return false;
 
         return true;
     });

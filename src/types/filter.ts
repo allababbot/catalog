@@ -20,4 +20,5 @@ export interface FilterState {
     ranges: Record<RangeKey, FilterRange>;
     excludePlanProviders: boolean;
     excludeChinaRegion: boolean;
+    excludeDeprecated: boolean;
 }

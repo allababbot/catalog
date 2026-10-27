@@ -37,6 +37,7 @@ describe("url state", () => {
         state.ranges.context = { min: "100000", max: "200000" };
         state.ranges.costOutput = { min: "0.5", max: "" };
         state.excludePlan = true;
+        state.excludeDeprecated = true;
         state.sort = "costInput";
         state.direction = -1;
         state.page = 7;

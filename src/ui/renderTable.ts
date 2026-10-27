@@ -41,13 +41,14 @@ export function renderTable(tbody: HTMLTableSectionElement, rows: ModelRow[]): v
                 : `<span class="subcost">cache ${fmtPrice(row.costCacheRead)}</span>`;
         const capabilities = renderCapabilityChips(row);
         const modalities = renderModalities(row.modalitiesInput, row.modalitiesOutput);
+        const status = row.status ? ` <span class="status-badge" data-status="${row.status}">${row.status}</span>` : "";
 
         tr.innerHTML = `
       <td class="cell cell-provider">${provider}</td>
       <td class="cell cell-model">
         <div class="model-card">
           <div class="model-top">
-            <span class="model-name" title="${escapeHtml(row.model)}">${escapeHtml(row.model)}</span>
+            <span class="model-title"><span class="model-name" title="${escapeHtml(row.model)}">${escapeHtml(row.model)}</span>${status}</span>
             <span class="card-out">${outputPrice}<span class="card-out-label">out /1M</span></span>
           </div>
           <div class="model-card-line">

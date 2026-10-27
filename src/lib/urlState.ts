@@ -20,6 +20,7 @@ export interface UrlState {
     ranges: Record<RangeKey, UrlRange>;
     excludePlan: boolean;
     excludeChina: boolean;
+    excludeDeprecated: boolean;
     sort: SortKey;
     direction: 1 | -1;
     page: number;
@@ -47,6 +48,7 @@ export function createDefaultUrlState(): UrlState {
         },
         excludePlan: false,
         excludeChina: false,
+        excludeDeprecated: false,
         sort: DEFAULT_SORT,
         direction: DEFAULT_DIRECTION,
         page: 1,
@@ -73,6 +75,7 @@ export function parseUrlState(search: string, hash: string, items: FacetItems): 
 
     state.excludePlan = params.get("excludePlan") === "true";
     state.excludeChina = params.get("excludeChina") === "true";
+    state.excludeDeprecated = params.get("excludeDeprecated") === "true";
 
     const sort = params.get("sort");
     const hasSort = sort !== null && isSortKey(sort);
@@ -117,6 +120,7 @@ export function buildUrl(state: UrlState, pathname: string): string {
 
     if (state.excludePlan) params.set("excludePlan", "true");
     if (state.excludeChina) params.set("excludeChina", "true");
+    if (state.excludeDeprecated) params.set("excludeDeprecated", "true");
     if (state.sort !== DEFAULT_SORT) {
         params.set("sort", state.sort);
         params.set("dir", state.direction === -1 ? "desc" : "asc");
@@ -140,6 +144,7 @@ export function isRefinement(previous: UrlState, next: UrlState): boolean {
     return (
         previous.excludePlan === next.excludePlan &&
         previous.excludeChina === next.excludeChina &&
+        previous.excludeDeprecated === next.excludeDeprecated &&
         previous.sort === next.sort &&
         previous.direction === next.direction &&
         previous.page === next.page &&
