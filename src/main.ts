@@ -3,6 +3,7 @@ import { availableFacetItems, filterRows } from "./lib/filters";
 import { allSelections } from "./lib/facets";
 import { fmtNum, fmtPrice } from "./lib/format";
 import { sortRows } from "./lib/sorting";
+import { rowsToCsv, rowsToJson } from "./lib/export";
 import { pageCount, pageWindow } from "./lib/pagination";
 import { allSelection, canonicalize, isSelected, noneSelection, someSelection, toggleValue } from "./lib/selection";
 import { buildUrl, DEFAULT_DIRECTION, DEFAULT_SORT, isRefinement, parseUrlStateForCatalog } from "./lib/urlState";
@@ -99,6 +100,8 @@ const els = {
     sortSelect: query<HTMLSelectElement>("#sortSelect"),
     sortDir: query<HTMLButtonElement>("#sortDir"),
     sortDirArrow: query<HTMLElement>("#sortDirArrow"),
+    exportCsvBtn: query<HTMLButtonElement>("#exportCsvBtn"),
+    exportJsonBtn: query<HTMLButtonElement>("#exportJsonBtn"),
 };
 
 const rangeInputs = {
@@ -588,6 +591,9 @@ function bindEvents(): void {
         render();
     });
 
+    els.exportCsvBtn.addEventListener("click", () => exportCurrentView("csv"));
+    els.exportJsonBtn.addEventListener("click", () => exportCurrentView("json"));
+
     document.querySelectorAll<HTMLTableCellElement>("thead th[data-key]").forEach((th) => {
         th.addEventListener("click", () => {
             const key = th.dataset.key as SortKey;
@@ -990,6 +996,26 @@ function filterToCanonical(canonicalId: string): void {
     canonicalFilter = canonicalId;
     goToPage(1);
     render();
+}
+
+function exportCurrentView(format: "csv" | "json"): void {
+    if (loading || allRows.length === 0) return;
+
+    const filtered = filterRows(allRows, buildFilterState());
+    const sorted = sortRows(filtered, sortKey, sortDirection);
+    const content = format === "csv" ? rowsToCsv(sorted) : rowsToJson(sorted);
+    const mime = format === "csv" ? "text/csv;charset=utf-8" : "application/json;charset=utf-8";
+    downloadText(content, `catalog.${format === "csv" ? "csv" : "json"}`, mime);
+}
+
+function downloadText(content: string, filename: string, mime: string): void {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 function captureUrlState(): UrlState {
