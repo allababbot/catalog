@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { allSelection, NONE_TOKEN, noneSelection, someSelection } from "../src/lib/selection";
-import { buildUrl, createDefaultUrlState, parseUrlState } from "../src/lib/urlState";
+import { buildUrl, createDefaultUrlState, parseUrlState, parseUrlStateForCatalog } from "../src/lib/urlState";
+import { normalizeCatalog } from "../src/lib/normalizeCatalog";
 import type { FacetItems } from "../src/types/facets";
 
 const ITEMS: FacetItems = {
@@ -136,5 +137,21 @@ describe("url state", () => {
 
         const parsed = parseUrlState(url.slice(url.indexOf("?")), "", ITEMS);
         expect(parsed.selections).toEqual(state.selections);
+    });
+
+    test("decodes facet values against the whole catalog", () => {
+        // Going back from a "claude" search to ?providers=OpenAI: OpenAI has no claude
+        // model, yet the restored URL must keep it selected.
+        const rows = normalizeCatalog({
+            providers: {
+                openai: { name: "OpenAI", models: { "gpt-5": { name: "GPT-5" } } },
+                anthropic: { name: "Anthropic", models: { "claude-sonnet-4": { name: "Claude Sonnet 4" } } },
+                meta: { name: "Meta", models: { "llama-4": { name: "Llama 4" } } },
+            },
+        });
+
+        const parsed = parseUrlStateForCatalog("?providers=OpenAI", "", rows);
+
+        expect(parsed.selections.providers).toEqual(someSelection(["OpenAI"]));
     });
 });

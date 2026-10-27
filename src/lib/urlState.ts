@@ -2,7 +2,8 @@ import { SORT_KEYS } from "../types/catalog";
 import type { SortKey } from "../types/catalog";
 import { decodeSelection, encodeSelection, sameSelection } from "./selection";
 import type { Selection } from "../types/selection";
-import { allSelections } from "./facets";
+import { allSelections, facetItems } from "./facets";
+import type { ModelRow } from "../types/catalog";
 import { FACET_KEYS } from "../types/facets";
 import type { FacetItems, FacetKey } from "../types/facets";
 import { RANGE_KEYS } from "../types/filter";
@@ -87,6 +88,16 @@ export function parseUrlState(search: string, hash: string, items: FacetItems): 
     if (Number.isInteger(page) && page > 0) state.page = page;
 
     return state;
+}
+
+/**
+ * The view state a URL stands for, decoded against every item the catalog offers.
+ *
+ * The URL carries its own filters, so the filters being replaced must not decide
+ * which of its facet values survive.
+ */
+export function parseUrlStateForCatalog(search: string, hash: string, rows: ModelRow[]): UrlState {
+    return parseUrlState(search, hash, facetItems(rows));
 }
 
 export function buildUrl(state: UrlState, pathname: string): string {

@@ -5,7 +5,7 @@ import { normalizeCatalog } from "./lib/normalizeCatalog";
 import { sortRows } from "./lib/sorting";
 import { pageCount, pageWindow } from "./lib/pagination";
 import { allSelection, canonicalize, isSelected, noneSelection, someSelection, toggleValue } from "./lib/selection";
-import { buildUrl, DEFAULT_DIRECTION, DEFAULT_SORT, isRefinement, parseUrlState } from "./lib/urlState";
+import { buildUrl, DEFAULT_DIRECTION, DEFAULT_SORT, isRefinement, parseUrlStateForCatalog } from "./lib/urlState";
 import type { UrlState } from "./lib/urlState";
 import "./styles.css";
 import type { CatalogJson, ModelRow, SortKey } from "./types/catalog";
@@ -521,7 +521,7 @@ function bindEvents(): void {
     window.addEventListener("popstate", () => {
         if (!initialized) return;
         lastPushedState = null;
-        applyUrlState(parseUrlState(window.location.search, window.location.hash, facetItemsForRows()));
+        applyUrlState(parseUrlStateForCatalog(window.location.search, window.location.hash, allRows));
         replaceNextUrl = true;
         render();
     });
@@ -951,7 +951,7 @@ function syncUrl(): void {
 
 
 function loadFromURL(): void {
-    applyUrlState(parseUrlState(window.location.search, window.location.hash, facetItemsForRows()));
+    applyUrlState(parseUrlStateForCatalog(window.location.search, window.location.hash, allRows));
 }
 
 function applyUrlState(state: UrlState): void {
