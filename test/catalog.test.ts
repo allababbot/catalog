@@ -24,6 +24,15 @@ const rows: ModelRow[] = [
         costInput: 1.25,
         costOutput: 10,
         costCacheRead: 0.13,
+        modelId: "gpt-5",
+        description: "",
+        status: "",
+        structuredOutput: false,
+        canonicalId: "",
+        lastUpdated: "",
+        inputLimit: null,
+        costCacheWrite: null,
+        contextTiers: [],
     },
     {
         provider: "Meta",
@@ -44,6 +53,15 @@ const rows: ModelRow[] = [
         costInput: 0.15,
         costOutput: 0.6,
         costCacheRead: null,
+        modelId: "llama-4-scout",
+        description: "",
+        status: "",
+        structuredOutput: false,
+        canonicalId: "",
+        lastUpdated: "",
+        inputLimit: null,
+        costCacheWrite: null,
+        contextTiers: [],
     },
 ];
 
@@ -116,6 +134,58 @@ describe("catalog normalization", () => {
 
         expect(result[0].providerId).toBe("requesty");
         expect(result[0].providerDoc).toBe("https://requesty.ai/solution/llm-routing/models");
+    });
+});
+
+describe("catalog normalization of model details", () => {
+    test("carries id, status, canonical model, limits, cache write and context tiers", () => {
+        const [row] = normalizeCatalog({
+            providers: {
+                google: {
+                    name: "Google",
+                    models: {
+                        "gemini-3-pro": {
+                            name: "Gemini 3 Pro",
+                            description: "Frontier model",
+                            status: "deprecated",
+                            structured_output: true,
+                            canonical_model_id: "google/gemini-3-pro",
+                            last_updated: "2026-01-02",
+                            limit: { context: 1000000, input: 900000, output: 64000 },
+                            cost: {
+                                input: 2,
+                                output: 12,
+                                cache_write: 2.5,
+                                tiers: [
+                                    { input: 4, output: 18, tier: { type: "context", size: 200000 } },
+                                    { input: 9, output: 9, tier: { type: "other", size: 1 } },
+                                ],
+                            },
+                        },
+                    },
+                },
+            },
+        });
+
+        expect(row).toMatchObject({
+            modelId: "gemini-3-pro",
+            description: "Frontier model",
+            status: "deprecated",
+            structuredOutput: true,
+            canonicalId: "google/gemini-3-pro",
+            lastUpdated: "2026-01-02",
+            inputLimit: 900000,
+            costCacheWrite: 2.5,
+            contextTiers: [{ above: 200000, costInput: 4, costOutput: 18 }],
+        });
+    });
+
+    test("treats an unknown status as current", () => {
+        const [row] = normalizeCatalog({
+            providers: { p: { models: { m: { status: "retired-soon" } } } },
+        });
+
+        expect(row.status).toBe("");
     });
 });
 

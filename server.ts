@@ -1,19 +1,15 @@
 import index from "./index.html";
+import { createCatalogHandler } from "./src/server/catalogHandler";
 
-const CATALOG_URL = "https://models.dev/catalog.json";
+const catalog = createCatalogHandler();
 
 const server = Bun.serve({
     routes: {
         "/": index,
+        "/api/catalog": () => catalog(),
     },
     development: false,
-    async fetch(req) {
-        const url = new URL(req.url);
-        if (url.pathname === "/api/catalog") {
-            const resp = await fetch(CATALOG_URL);
-            const data = await resp.json();
-            return Response.json(data);
-        }
+    fetch() {
         return new Response("Not Found", { status: 404 });
     },
 });

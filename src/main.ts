@@ -1,14 +1,13 @@
 import { availableFacetItems, filterRows } from "./lib/filters";
 import { allSelections } from "./lib/facets";
 import { fmtNum, fmtPrice } from "./lib/format";
-import { normalizeCatalog } from "./lib/normalizeCatalog";
 import { sortRows } from "./lib/sorting";
 import { pageCount, pageWindow } from "./lib/pagination";
 import { allSelection, canonicalize, isSelected, noneSelection, someSelection, toggleValue } from "./lib/selection";
 import { buildUrl, DEFAULT_DIRECTION, DEFAULT_SORT, isRefinement, parseUrlStateForCatalog } from "./lib/urlState";
 import type { UrlState } from "./lib/urlState";
 import "./styles.css";
-import type { CatalogJson, ModelRow, SortKey } from "./types/catalog";
+import type { CatalogPayload, ModelRow, SortKey } from "./types/catalog";
 import { FACETS, FACET_KEYS } from "./types/facets";
 import type { FacetEntry, FacetKey } from "./types/facets";
 import { RANGE_KEYS } from "./types/filter";
@@ -121,8 +120,8 @@ async function loadCatalog(): Promise<void> {
         const response = await fetch("/api/catalog");
         if (!response.ok) throw new Error(`The catalog service answered ${response.status}.`);
 
-        const catalog = (await response.json()) as CatalogJson;
-        const rows = normalizeCatalog(catalog);
+        const payload = (await response.json()) as CatalogPayload;
+        const rows = Array.isArray(payload.rows) ? payload.rows : [];
         if (rows.length === 0) throw new Error("The catalog came back empty.");
 
         allRows = rows;
