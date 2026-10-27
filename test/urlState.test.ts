@@ -38,6 +38,7 @@ describe("url state", () => {
         state.ranges.costOutput = { min: "0.5", max: "" };
         state.excludePlan = true;
         state.excludeDeprecated = true;
+        state.canonicalId = "anthropic/claude-sonnet-4";
         state.sort = "costInput";
         state.direction = -1;
         state.page = 7;

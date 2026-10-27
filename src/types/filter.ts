@@ -21,4 +21,6 @@ export interface FilterState {
     excludePlanProviders: boolean;
     excludeChinaRegion: boolean;
     excludeDeprecated: boolean;
+    /** Keeps only the offers of this canonical model across providers; empty keeps all. */
+    canonicalId: string;
 }

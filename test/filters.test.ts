@@ -80,6 +80,7 @@ function filterState(overrides: Partial<FilterState> = {}): FilterState {
         excludePlanProviders: false,
         excludeChinaRegion: false,
         excludeDeprecated: false,
+        canonicalId: "",
         ...overrides,
     };
 }
@@ -233,12 +234,24 @@ describe("filterRows", () => {
     });
 });
 
-describe("status filters", () => {
+describe("status and canonical model filters", () => {
     test("keeps deprecated models unless asked to exclude them", () => {
         const withDeprecated: ModelRow[] = [{ ...rows[0], status: "deprecated" }, { ...rows[1], status: "beta" }];
 
         expect(filterRows(withDeprecated, filterState())).toHaveLength(2);
         expect(filterRows(withDeprecated, filterState({ excludeDeprecated: true })).map((row) => row.model)).toEqual(["Llama 4 Scout"]);
+    });
+
+    test("narrows to the offers of one canonical model", () => {
+        const offers: ModelRow[] = [
+            { ...rows[0], provider: "OpenAI", canonicalId: "openai/gpt-5" },
+            { ...rows[0], provider: "OpenRouter", canonicalId: "openai/gpt-5" },
+            { ...rows[1], canonicalId: "meta/llama-4-scout" },
+        ];
+
+        const result = filterRows(offers, filterState({ canonicalId: "openai/gpt-5" }));
+
+        expect(result.map((row) => row.provider)).toEqual(["OpenAI", "OpenRouter"]);
     });
 });
 

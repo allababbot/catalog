@@ -1,3 +1,4 @@
+import { canonicalCounts } from "./lib/canonical";
 import { availableFacetItems, filterRows } from "./lib/filters";
 import { allSelections } from "./lib/facets";
 import { fmtNum, fmtPrice } from "./lib/format";
@@ -48,6 +49,10 @@ let loading = true;
 let activeFacet: FacetKey | null = null;
 let lastFacetButton: HTMLButtonElement | null = null;
 let facets: Record<FacetKey, FacetControl>;
+/** The canonical model the table is narrowed to by a row's "N providers" link; empty for none. */
+let canonicalFilter = "";
+/** How many providers offer each canonical model, counted once when the catalog loads. */
+let providerCounts = new Map<string, number>();
 
 const selections: Record<FacetKey, Selection> = allSelections();
 
@@ -126,6 +131,7 @@ async function loadCatalog(): Promise<void> {
         if (rows.length === 0) throw new Error("The catalog came back empty.");
 
         allRows = rows;
+        providerCounts = canonicalCounts(rows);
 
         if (!initialized) {
             buildFacets(rows);
@@ -598,7 +604,7 @@ function render(): void {
     const start = (currentPage - 1) * PAGE_SIZE;
     const pageRows = sorted.slice(start, start + PAGE_SIZE);
 
-    renderTable(els.tbody, pageRows);
+    renderTable(els.tbody, pageRows, { providerCounts, onFilterCanonical: filterToCanonical });
     els.tbody.setAttribute("aria-busy", "false");
 
     renderStats(
@@ -709,6 +715,15 @@ function renderActiveFilters(): void {
             );
         }
 
+        if (canonicalFilter) {
+            chips.push(
+                makeChip(`Same model: ${canonicalFilter}`, () => {
+                    canonicalFilter = "";
+                    goToPage(1);
+                    render();
+                }),
+            );
+        }
     }
 
     if (chips.length === 0) {
@@ -842,6 +857,7 @@ function clearAllFilters(): void {
     els.excludePlan.checked = false;
     els.excludeChina.checked = false;
     els.excludeDeprecated.checked = false;
+    canonicalFilter = "";
     goToPage(1);
     render();
 }
@@ -871,6 +887,7 @@ function buildFilterState(): FilterState {
         excludePlanProviders: els.excludePlan.checked,
         excludeChinaRegion: els.excludeChina.checked,
         excludeDeprecated: els.excludeDeprecated.checked,
+        canonicalId: canonicalFilter,
     };
 }
 
@@ -931,6 +948,14 @@ function goToPage(page: number): void {
     currentPage = page;
 }
 
+/** Narrows the table to one canonical model, so its providers compare price by price. */
+function filterToCanonical(canonicalId: string): void {
+    if (!canonicalId) return;
+    canonicalFilter = canonicalId;
+    goToPage(1);
+    render();
+}
+
 function captureUrlState(): UrlState {
     return {
         query: els.searchBox.value,
@@ -944,6 +969,7 @@ function captureUrlState(): UrlState {
         excludePlan: els.excludePlan.checked,
         excludeChina: els.excludeChina.checked,
         excludeDeprecated: els.excludeDeprecated.checked,
+        canonicalId: canonicalFilter,
         sort: sortKey,
         direction: sortDirection,
         page: currentPage,
@@ -988,6 +1014,7 @@ function applyUrlState(state: UrlState): void {
     els.excludePlan.checked = state.excludePlan;
     els.excludeChina.checked = state.excludeChina;
     els.excludeDeprecated.checked = state.excludeDeprecated;
+    canonicalFilter = state.canonicalId;
     sortKey = state.sort;
     sortDirection = state.direction;
     currentPage = state.page;

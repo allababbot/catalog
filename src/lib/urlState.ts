@@ -21,6 +21,8 @@ export interface UrlState {
     excludePlan: boolean;
     excludeChina: boolean;
     excludeDeprecated: boolean;
+    /** The canonical model the table is narrowed to; empty for none. */
+    canonicalId: string;
     sort: SortKey;
     direction: 1 | -1;
     page: number;
@@ -49,6 +51,7 @@ export function createDefaultUrlState(): UrlState {
         excludePlan: false,
         excludeChina: false,
         excludeDeprecated: false,
+        canonicalId: "",
         sort: DEFAULT_SORT,
         direction: DEFAULT_DIRECTION,
         page: 1,
@@ -76,6 +79,7 @@ export function parseUrlState(search: string, hash: string, items: FacetItems): 
     state.excludePlan = params.get("excludePlan") === "true";
     state.excludeChina = params.get("excludeChina") === "true";
     state.excludeDeprecated = params.get("excludeDeprecated") === "true";
+    state.canonicalId = params.get("model")?.trim() ?? "";
 
     const sort = params.get("sort");
     const hasSort = sort !== null && isSortKey(sort);
@@ -121,6 +125,7 @@ export function buildUrl(state: UrlState, pathname: string): string {
     if (state.excludePlan) params.set("excludePlan", "true");
     if (state.excludeChina) params.set("excludeChina", "true");
     if (state.excludeDeprecated) params.set("excludeDeprecated", "true");
+    if (state.canonicalId) params.set("model", state.canonicalId);
     if (state.sort !== DEFAULT_SORT) {
         params.set("sort", state.sort);
         params.set("dir", state.direction === -1 ? "desc" : "asc");
@@ -145,6 +150,7 @@ export function isRefinement(previous: UrlState, next: UrlState): boolean {
         previous.excludePlan === next.excludePlan &&
         previous.excludeChina === next.excludeChina &&
         previous.excludeDeprecated === next.excludeDeprecated &&
+        previous.canonicalId === next.canonicalId &&
         previous.sort === next.sort &&
         previous.direction === next.direction &&
         previous.page === next.page &&

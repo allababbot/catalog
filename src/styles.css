@@ -1198,6 +1198,31 @@ th.sorted {
     text-underline-offset: 3px;
 }
 
+/* "N providers": the way from a model to every provider's offer of it. */
+.provider-count {
+    display: block;
+    margin-top: 1px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--muted);
+    font-family: var(--font);
+    font-size: var(--fs-label);
+    line-height: 1.4;
+    letter-spacing: 0;
+    text-align: left;
+    text-decoration: underline;
+    text-decoration-color: var(--control);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+    transition: color var(--t-fast) var(--ease);
+}
+
+.provider-count:hover {
+    color: var(--text);
+    text-decoration-color: currentColor;
+}
+
 .cell-model {
     font-size: 14px;
     font-weight: 500;
@@ -1219,6 +1244,35 @@ th.sorted {
     min-width: 0;
 }
 
+/* The disclosure that opens a row's detail row. */
+.row-toggle {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    margin-right: -2px;
+    padding: 0;
+    border: 0;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--faint);
+    font-family: var(--mono);
+    font-size: 11px;
+    line-height: 1;
+    transition: color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+}
+
+.row-toggle:hover {
+    color: var(--text);
+    background: var(--active);
+}
+
+.row-toggle[aria-expanded="true"] {
+    color: var(--text);
+}
+
 .status-badge {
     flex: none;
     padding: 1px 5px;
@@ -1236,6 +1290,101 @@ th.sorted {
     border-color: currentColor;
     color: var(--negative);
     background: var(--negative-bg);
+}
+
+/* ── Detail row ────────────────────────────────────────── */
+
+.catalog-table tbody tr.expanded td {
+    border-bottom-color: transparent;
+}
+
+.catalog-table tbody .detail-row td {
+    height: auto;
+    padding: 0 16px 16px 28px;
+    overflow: visible;
+    white-space: normal;
+    vertical-align: top;
+}
+
+.catalog-table tbody .detail-row:hover td {
+    background: transparent;
+}
+
+.detail-body {
+    padding-top: 2px;
+}
+
+.detail-description {
+    max-width: 86ch;
+    margin-bottom: 12px;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.55;
+}
+
+.detail-description.detail-muted {
+    color: var(--faint);
+}
+
+.detail-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 28px;
+    margin: 0;
+}
+
+.detail-item {
+    min-width: 132px;
+}
+
+.detail-item-wide {
+    flex-basis: 100%;
+}
+
+.detail-item dt {
+    color: var(--faint);
+    font-size: var(--fs-label);
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
+.detail-item dd {
+    margin: 2px 0 0;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: -0.01em;
+}
+
+.detail-code {
+    font-family: var(--mono);
+}
+
+.detail-copy {
+    margin-left: 6px;
+    padding: 1px 6px;
+    border: 1px solid var(--control);
+    border-radius: var(--radius-chip);
+    background: transparent;
+    color: var(--muted);
+    font-family: var(--font);
+    font-size: var(--fs-label);
+    line-height: 1.3;
+    letter-spacing: 0;
+    transition: color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+}
+
+.detail-copy:hover {
+    border-color: var(--muted);
+    color: var(--text);
+}
+
+.detail-tiers {
+    display: grid;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
 }
 
 .card-out,
@@ -1683,6 +1832,34 @@ th.sorted {
     .card-provider .provider-link {
         display: inline;
         overflow: visible;
+    }
+
+    .card-provider .provider-count {
+        display: inline;
+        margin: 0 0 0 6px;
+    }
+
+    .catalog-table tbody tr.detail-row {
+        display: block;
+        padding: 0;
+        border-bottom: 1px solid var(--rule);
+    }
+
+    .catalog-table tbody tr.detail-row td {
+        display: block;
+        height: auto;
+        padding: 0 16px 14px;
+        border: 0;
+        overflow: visible;
+        white-space: normal;
+    }
+
+    .catalog-table tbody tr.detail-row:hover {
+        background: transparent;
+    }
+
+    .catalog-table tbody tr.expanded {
+        border-bottom-color: transparent;
     }
 
     .card-date {

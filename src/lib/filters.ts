@@ -42,6 +42,8 @@ export function filterRows(rows: ModelRow[], filters: FilterState): ModelRow[] {
 
         if (filters.excludeDeprecated && row.status === "deprecated") return false;
 
+        if (filters.canonicalId && row.canonicalId !== filters.canonicalId) return false;
+
         return true;
     });
 }
