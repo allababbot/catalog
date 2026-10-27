@@ -14,6 +14,21 @@ One model of one provider, flattened into a single row: its provider, family,
 capabilities, modalities, limits, prices and release date. `ModelRow` in
 `src/types/catalog.ts` is the shape of a row.
 
+## Canonical Model
+
+The model a Catalog Row is one provider's offer of, so the same model offered by
+several providers has several rows that share a canonical id. A row whose canonical
+model more than one provider offers says **N providers**, and clicking that link
+narrows the table to the canonical model — with a price sort, that answers which
+provider is cheapest. `canonicalId` on a row is empty when models.dev names no
+canonical model.
+
+## Status
+
+The lifecycle stage models.dev marks a model with: `alpha`, `beta` or `deprecated`.
+A row shows its status as a badge; an unmarked model is current. The **Exclude
+deprecated** switch hides the deprecated rows and is off by default.
+
 ## Facet
 
 One of the six filters in the sidebar — **Provider**, **Family**,
@@ -41,8 +56,10 @@ Input and Modality Output.
 ## Item
 
 One value a facet offers, e.g. `OpenAI` for the Provider facet. The items of
-a facet come from the catalog rows, except the Capability facet, whose four
-items are fixed.
+a facet come from the catalog rows, except the Capability facet, whose five
+items are fixed: Reasoning, Tool Call, Vision, Structured Output and Open Weights.
+Vision means the model reads images (`modalities.input` contains `image`), not that
+it takes file attachments.
 
 ## Selection
 
