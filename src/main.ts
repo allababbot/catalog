@@ -4,7 +4,6 @@ import { allSelections } from "./lib/facets";
 import { fmtNum, fmtPrice } from "./lib/format";
 import { sortRows } from "./lib/sorting";
 import { rowsToCsv, rowsToJson } from "./lib/export";
-import { pageCount, pageWindow } from "./lib/pagination";
 import { allSelection, canonicalize, isSelected, noneSelection, someSelection, toggleValue } from "./lib/selection";
 import { buildUrl, DEFAULT_DIRECTION, DEFAULT_SORT, isRefinement, parseUrlStateForCatalog } from "./lib/urlState";
 import type { UrlState } from "./lib/urlState";
@@ -15,11 +14,14 @@ import type { FacetEntry, FacetItems, FacetKey } from "./types/facets";
 import { RANGE_KEYS } from "./types/filter";
 import type { FilterState, RangeKey } from "./types/filter";
 import type { Selection } from "./types/selection";
+import { categoryIcon, filterIcon } from "./ui/icons";
+import type { HeroIconName, LucideIconName } from "./ui/icons";
 import { renderStats } from "./ui/renderStats";
-import { renderTable } from "./ui/renderTable";
+import { appendTableRows, renderTable } from "./ui/renderTable";
 
-const PAGE_SIZE = 50;
-const PAGE_WINDOW = 2;
+/** Rows rendered up front; more are appended as the reader scrolls, without a page limit. */
+const INITIAL_ROWS = 250;
+const ROW_BATCH = 250;
 
 const SORT_OPTIONS: { key: SortKey; label: string }[] = [
     { key: "releaseDate", label: "Release date" },
@@ -40,9 +42,63 @@ const RANGE_LABELS: Record<RangeKey, string> = {
     costOutput: "Output",
 };
 
+/** OpenRouter's sidebar glyphs, keyed by the facet they label. */
+const FACET_ICONS: Record<FacetKey, HeroIconName> = {
+    providers: "provider",
+    families: "family",
+    caps: "caps",
+    modIn: "modIn",
+    modOut: "modOut",
+    releaseYear: "releaseYear",
+};
+
+/** OpenRouter's category-tab glyphs, including the task groups after the output modalities. */
+const CATEGORY_ICONS: Record<string, LucideIconName> = {
+    text: "type",
+    image: "image",
+    video: "video",
+    speech: "speech",
+    decisions: "gavel",
+    embeddings: "boxes",
+    rerank: "arrowUpDown",
+};
+
+/** The tabs above the list, grouped by what a model produces (its output modalities). */
+interface CategoryTab {
+    key: string;
+    facet?: FacetKey;
+    value?: string;
+    query?: string;
+    matches(row: ModelRow): boolean;
+}
+
+const CATEGORY_TABS: CategoryTab[] = [
+    { key: "all", matches: () => true },
+    { key: "text", facet: "modOut", value: "text", matches: (row) => row.modalitiesOutput.includes("text") },
+    { key: "image", facet: "modOut", value: "image", matches: (row) => row.modalitiesOutput.includes("image") },
+    { key: "video", facet: "modOut", value: "video", matches: (row) => row.modalitiesOutput.includes("video") },
+    { key: "speech", facet: "modOut", value: "audio", matches: (row) => row.modalitiesOutput.includes("audio") },
+    {
+        key: "decisions",
+        query: "decision",
+        matches: (row) => `${row.model} ${row.description}`.toLowerCase().includes("decision"),
+    },
+    {
+        key: "embeddings",
+        query: "embedding",
+        matches: (row) => `${row.model} ${row.description}`.toLowerCase().includes("embedding"),
+    },
+    {
+        key: "rerank",
+        query: "rerank",
+        matches: (row) => `${row.model} ${row.description}`.toLowerCase().includes("rerank"),
+    },
+];
+
 let allRows: ModelRow[] = [];
-let currentPage = 1;
-let totalPages = 1;
+let sortedRows: ModelRow[] = [];
+let visibleRows = INITIAL_ROWS;
+let appendLock = false;
 let sortKey: SortKey = DEFAULT_SORT;
 let sortDirection: 1 | -1 = DEFAULT_DIRECTION;
 let initialized = false;
@@ -78,13 +134,10 @@ const els = {
     errorMessage: query<HTMLElement>("#errorMessage"),
     retryBtn: query<HTMLButtonElement>("#retryBtn"),
     themeToggle: query<HTMLButtonElement>("#themeToggle"),
+    topSearch: query<HTMLButtonElement>("#topSearch"),
     excludePlan: query<HTMLInputElement>("#excludePlan"),
     excludeChina: query<HTMLInputElement>("#excludeChina"),
     excludeDeprecated: query<HTMLInputElement>("#excludeDeprecated"),
-    pagePrev: query<HTMLButtonElement>("#pagePrev"),
-    pageNext: query<HTMLButtonElement>("#pageNext"),
-    pageNumbers: query<HTMLElement>("#pageNumbers"),
-    pagination: query<HTMLElement>("#pagination"),
     facetFilters: query<HTMLElement>("#facetFilters"),
     facetPopover: query<HTMLElement>("#facetPopover"),
     facetMenuTitle: query<HTMLElement>("#facetMenuTitle"),
@@ -121,9 +174,24 @@ interface FacetControl {
 // ── Boot ────────────────────────────────────────────────────
 
 initTheme();
+hydrateStaticIcons();
 populateSortOptions();
 bindEvents();
 void loadCatalog();
+
+/** Add OpenRouter's glyphs to the static controls built in index.html. */
+function hydrateStaticIcons(): void {
+    if (els.rangeToggle.querySelector(".filter-icon") === null) {
+        els.rangeToggle.insertAdjacentHTML("afterbegin", filterIcon("price"));
+    }
+
+    document.querySelectorAll<HTMLButtonElement>(".category-tab[data-category]").forEach((tab) => {
+        const icon = CATEGORY_ICONS[tab.dataset.category ?? ""];
+        if (icon && tab.querySelector(".tab-icon") === null) {
+            tab.insertAdjacentHTML("afterbegin", categoryIcon(icon));
+        }
+    });
+}
 
 async function loadCatalog(): Promise<void> {
     renderLoading();
@@ -146,6 +214,7 @@ async function loadCatalog(): Promise<void> {
             loadFromURL();
             initialized = true;
         }
+        updateCategoryCounts();
 
         loading = false;
         els.errorBox.hidden = true;
@@ -164,7 +233,6 @@ function renderLoading(): void {
     els.tablePanel.setAttribute("aria-busy", "true");
     els.activeFilters.hidden = true;
     els.activeFilters.innerHTML = "";
-    els.pagination.hidden = true;
     els.tableFoot.hidden = true;
 
     for (const element of [els.statProv, els.statMedIn, els.statMedOut, els.statMaxCtx]) {
@@ -178,7 +246,7 @@ function renderLoading(): void {
     els.matchLabel.textContent = "";
 
     const rows = Array.from({ length: 9 }, (_, index) => {
-        const cells = Array.from({ length: 9 }, (_, cell) => {
+        const cells = Array.from({ length: 8 }, (_, cell) => {
             const shape = cell === 0 || cell === 1 ? " wide" : cell > 2 && cell < 6 ? " narrow" : "";
             return `<td aria-hidden="true"><span class="skeleton-bar${shape}"></span></td>`;
         }).join("");
@@ -205,7 +273,6 @@ function showError(message: string): void {
     els.matchBar.setAttribute("aria-label", "The catalog is unavailable");
     els.matchFill.style.width = "0%";
     els.matchLabel.textContent = "";
-    els.pagination.hidden = true;
     els.tableFoot.hidden = true;
 }
 
@@ -216,6 +283,18 @@ type Theme = "light" | "dark";
 function initTheme(): void {
     const theme: Theme = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
     applyTheme(theme);
+
+    const focusSearch = () => {
+        els.searchBox.focus();
+        els.searchBox.select();
+    };
+    els.topSearch.addEventListener("click", focusSearch);
+    document.addEventListener("keydown", (event) => {
+        if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+            event.preventDefault();
+            focusSearch();
+        }
+    });
 
     els.themeToggle.addEventListener("click", () => {
         const next: Theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
@@ -244,6 +323,9 @@ function buildFacets(rows: ModelRow[]): void {
         return [definition.key, control] as const;
     });
 
+    // The shared panel is moved under an open facet; keep it in the sidebar after a rebuild.
+    els.facetFilters.appendChild(els.facetPopover);
+
     facets = Object.fromEntries(controls) as Record<FacetKey, FacetControl>;
 }
 
@@ -255,6 +337,7 @@ function createFacetControl(definition: FacetEntry, items: string[]): FacetContr
     button.setAttribute("aria-haspopup", "dialog");
     button.setAttribute("aria-expanded", "false");
     button.setAttribute("aria-controls", "facetPopover");
+    button.innerHTML = filterIcon(FACET_ICONS[definition.key]);
 
     const name = document.createElement("span");
     name.className = "filter-name";
@@ -335,10 +418,10 @@ function openFacet(key: FacetKey | null): void {
 
     renderFacetItems();
     syncFacetAll();
+    control.button.after(els.facetPopover);
     els.facetPopover.hidden = false;
     lastFacetButton = control.button;
     updateFacetExpanded();
-    positionFacetPopover(control.button);
 
     requestAnimationFrame(() => {
         if (!els.facetSearchWrap.hidden && !window.matchMedia("(max-width: 900px)").matches) {
@@ -366,25 +449,6 @@ function updateFacetExpanded(): void {
     for (const key of FACET_KEYS) {
         facets[key].button.setAttribute("aria-expanded", String(activeFacet === key));
     }
-}
-
-function positionFacetPopover(button: HTMLButtonElement): void {
-    const toolbar = els.facetFilters.closest(".toolbar");
-    if (!(toolbar instanceof HTMLElement)) return;
-
-    const toolbarRect = toolbar.getBoundingClientRect();
-    const buttonRect = button.getBoundingClientRect();
-    const top = Math.max(0, buttonRect.bottom - toolbarRect.top + 8);
-    els.facetPopover.style.setProperty("--pop-top", `${Math.round(top)}px`);
-
-    if (window.matchMedia("(max-width: 900px)").matches) {
-        els.facetPopover.style.removeProperty("--pop-left");
-        return;
-    }
-
-    const maxLeft = Math.max(0, toolbar.clientWidth - 320);
-    const left = Math.min(Math.max(0, buttonRect.left - toolbarRect.left), maxLeft);
-    els.facetPopover.style.setProperty("--pop-left", `${left}px`);
 }
 
 function renderFacetItems(): void {
@@ -548,12 +612,6 @@ function bindEvents(): void {
         }
     });
 
-    window.addEventListener("resize", () => {
-        if (activeFacet === null) return;
-        const button = facets[activeFacet].button;
-        positionFacetPopover(button);
-    });
-
     window.addEventListener("popstate", () => {
         if (!initialized) return;
         lastPushedState = null;
@@ -562,19 +620,7 @@ function bindEvents(): void {
         render();
     });
 
-    els.pagePrev.addEventListener("click", () => {
-        if (currentPage > 1) {
-            goToPage(currentPage - 1);
-            render();
-        }
-    });
-
-    els.pageNext.addEventListener("click", () => {
-        if (currentPage < totalPages) {
-            goToPage(currentPage + 1);
-            render();
-        }
-    });
+    setupProgressiveRows();
 
     els.sortSelect.addEventListener("change", () => {
         const key = els.sortSelect.value as SortKey;
@@ -593,6 +639,27 @@ function bindEvents(): void {
 
     els.exportCsvBtn.addEventListener("click", () => exportCurrentView("csv"));
     els.exportJsonBtn.addEventListener("click", () => exportCurrentView("json"));
+
+    document.querySelectorAll<HTMLButtonElement>(".view-tab").forEach((button) => {
+        button.addEventListener("click", () => {
+            const view = button.dataset.view === "table" ? "table" : "list";
+            const isList = view === "list";
+            els.tablePanel.classList.toggle("list-view", isList);
+            els.tablePanel.classList.toggle("table-view", !isList);
+
+            document.querySelectorAll<HTMLButtonElement>(".view-tab").forEach((tab) => {
+                const active = tab === button;
+                tab.classList.toggle("is-active", active);
+                tab.setAttribute("aria-selected", String(active));
+            });
+        });
+    });
+
+    document.querySelectorAll<HTMLButtonElement>(".category-tab").forEach((button) => {
+        button.addEventListener("click", () => {
+            applyCategory(button.dataset.category ?? "all");
+        });
+    });
 
     document.querySelectorAll<HTMLTableCellElement>("thead th[data-key]").forEach((th) => {
         th.addEventListener("click", () => {
@@ -625,11 +692,8 @@ function render(): void {
     const filtered = filterRows(allRows, buildFilterState());
     const sorted = sortRows(filtered, sortKey, sortDirection);
 
-    totalPages = pageCount(sorted.length, PAGE_SIZE);
-    if (currentPage > totalPages) currentPage = totalPages;
-
-    const start = (currentPage - 1) * PAGE_SIZE;
-    const pageRows = sorted.slice(start, start + PAGE_SIZE);
+    sortedRows = sorted;
+    const pageRows = sorted.slice(0, visibleRows);
 
     renderTable(els.tbody, pageRows, { providerCounts, onFilterCanonical: filterToCanonical });
     els.tbody.setAttribute("aria-busy", "false");
@@ -648,13 +712,14 @@ function render(): void {
         },
         filtered,
         allRows.length,
-        sorted.length === 0 ? 0 : start + 1,
-        Math.min(start + PAGE_SIZE, sorted.length),
+        1,
+        pageRows.length,
+        visibleRows < sorted.length,
     );
 
+    els.tableFoot.hidden = sorted.length === 0;
     updateFacetItemCounts();
     renderActiveFilters();
-    renderPagination();
     renderSortIndicators();
     syncUrl();
 }
@@ -817,42 +882,34 @@ function rangeChipText(key: RangeKey): string | null {
     return `${label} ≤ ${format(max)}`;
 }
 
-function renderPagination(): void {
-    const hasPages = totalPages > 1;
-    els.pagination.hidden = !hasPages;
-    els.tableFoot.hidden = false;
+/** Appends the next batch of models as the reader nears the end of the table. */
+function setupProgressiveRows(): void {
+    const onScroll = (): void => {
+        const nearBottom = window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 600;
+        if (nearBottom) appendNextRows();
+    };
 
-    els.pagePrev.disabled = currentPage <= 1;
-    els.pageNext.disabled = currentPage >= totalPages;
+    window.addEventListener("scroll", onScroll, { passive: true });
+    document.addEventListener("scroll", onScroll, { passive: true });
+}
 
-    if (!hasPages) {
-        els.pageNumbers.innerHTML = "";
-        return;
-    }
+function appendNextRows(): void {
+    if (loading || appendLock || visibleRows >= sortedRows.length) return;
 
-    const pages = pageWindow(currentPage, totalPages, PAGE_WINDOW);
+    appendLock = true;
+    setTimeout(() => {
+        appendLock = false;
+    }, 0);
 
-    els.pageNumbers.innerHTML = pages
-        .map((page) => {
-            if (typeof page === "string") {
-                return `<span class="page-ellipsis" aria-hidden="true">…</span>`;
-            }
-            const current = page === currentPage ? ' aria-current="page"' : "";
-            const label = page === currentPage ? `Page ${page}, current page` : `Page ${page}`;
-            return `<button class="page-num" type="button" data-page="${page}" aria-label="${label}"${current}>${page}</button>`;
-        })
-        .join("");
+    const next = sortedRows.slice(visibleRows, visibleRows + ROW_BATCH);
+    appendTableRows(els.tbody, next, { providerCounts, onFilterCanonical: filterToCanonical }, visibleRows);
+    visibleRows += next.length;
 
-    els.pageNumbers.querySelectorAll<HTMLButtonElement>(".page-num").forEach((button) => {
-        button.addEventListener("click", () => {
-            const page = Number(button.dataset.page);
-            if (!Number.isInteger(page)) return;
-            goToPage(page);
-            render();
-            const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-            els.tablePanel.scrollIntoView({ block: "start", behavior: reduceMotion ? "auto" : "smooth" });
-        });
-    });
+    const total = sortedRows.length.toLocaleString("en-US");
+    els.tableRange.textContent =
+        visibleRows >= sortedRows.length
+            ? `All ${total} models shown`
+            : `Showing ${visibleRows.toLocaleString("en-US")} of ${total} models · scroll for more`;
 }
 
 function renderSortIndicators(): void {
@@ -874,7 +931,7 @@ function renderSortIndicators(): void {
 
 // ── Filters and state ───────────────────────────────────────
 
-function clearAllFilters(): void {
+function resetFiltersOnly(): void {
     els.searchBox.value = "";
     for (const key of FACET_KEYS) setFacetSelection(key, allSelection());
     for (const { min, max } of Object.values(rangeInputs)) {
@@ -885,8 +942,42 @@ function clearAllFilters(): void {
     els.excludeChina.checked = false;
     els.excludeDeprecated.checked = false;
     canonicalFilter = "";
+}
+
+function clearAllFilters(): void {
+    resetFiltersOnly();
     goToPage(1);
     render();
+    markCategory("all");
+}
+
+/** Applies one of the catalog's headline categories through the existing filter state. */
+function applyCategory(key: string): void {
+    const tab = CATEGORY_TABS.find((candidate) => candidate.key === key);
+    if (!tab) return;
+
+    resetFiltersOnly();
+    if (tab.facet && tab.value) setFacetSelection(tab.facet, someSelection([tab.value]));
+    if (tab.query) els.searchBox.value = tab.query;
+
+    markCategory(tab.key);
+    goToPage(1);
+    render();
+}
+
+function markCategory(key: string): void {
+    document.querySelectorAll<HTMLButtonElement>(".category-tab").forEach((tab) => {
+        const active = tab.dataset.category === key;
+        tab.classList.toggle("is-active", active);
+        tab.setAttribute("aria-selected", String(active));
+    });
+}
+
+function updateCategoryCounts(): void {
+    document.querySelectorAll<HTMLElement>("[data-count]").forEach((element) => {
+        const tab = CATEGORY_TABS.find((candidate) => candidate.key === element.dataset.count);
+        element.textContent = tab ? allRows.filter(tab.matches).length.toLocaleString("en-US") : "";
+    });
 }
 
 function buildFilterState(): FilterState {
@@ -986,8 +1077,9 @@ function defaultSortDirection(key: SortKey): 1 | -1 {
     return key === "releaseDate" || key === "knowledge" || key === "context" || key === "outputLimit" ? -1 : 1;
 }
 
-function goToPage(page: number): void {
-    currentPage = page;
+/** Resets the progressive list whenever the result set changes. */
+function goToPage(_page: number): void {
+    visibleRows = INITIAL_ROWS;
 }
 
 /** Narrows the table to one canonical model, so its providers compare price by price. */
@@ -1034,7 +1126,7 @@ function captureUrlState(): UrlState {
         canonicalId: canonicalFilter,
         sort: sortKey,
         direction: sortDirection,
-        page: currentPage,
+        page: 1,
     };
 }
 
@@ -1079,7 +1171,7 @@ function applyUrlState(state: UrlState): void {
     canonicalFilter = state.canonicalId;
     sortKey = state.sort;
     sortDirection = state.direction;
-    currentPage = state.page;
+    visibleRows = INITIAL_ROWS;
 }
 
 function query<T extends Element>(selector: string): T {

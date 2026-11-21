@@ -7,10 +7,10 @@
       name="description"
       content="Every model in the models.dev catalog, with its price, context window and capabilities."
     />
-    <title>Model catalog · models.dev</title>
+    <title>Models · Model catalog</title>
     <link
       rel="icon"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Crect width='20' height='20' rx='4' fill='%230f1317'/%3E%3Cpath d='M4 6h12M4 10h8M4 14h10' stroke='%23fff' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Crect width='20' height='20' rx='4' fill='%23f5c518'/%3E%3Cg fill='none' stroke='%231a1400' stroke-width='1.4' stroke-linejoin='round'%3E%3Cpath d='M10 5.3C8.4 4.1 6.2 3.7 3.8 3.9v11.4c2.4-.2 4.6.2 6.2 1.4 1.6-1.2 3.8-1.6 6.2-1.4V3.9c-2.4-.2-4.6.2-6.2 1.4Z'/%3E%3Cpath d='M10 5.3v11.4'/%3E%3C/g%3E%3C/svg%3E"
     />
     <script>
       // Set the theme before first paint so the page never flashes the wrong ground.
@@ -44,6 +44,27 @@
           <span class="brand-scope">models.dev</span>
         </a>
 
+        <button class="top-search" id="topSearch" type="button" aria-label="Search models">
+          <svg class="icon" viewBox="0 0 16 16" aria-hidden="true">
+            <circle cx="7" cy="7" r="4.4" />
+            <path d="m10.4 10.4 3 3" />
+          </svg>
+          <span>Search</span>
+          <kbd>⌘</kbd><kbd>K</kbd>
+        </button>
+
+        <nav class="main-nav" aria-label="Primary">
+          <a class="nav-link is-current" href="#catalog" aria-current="page">Models</a>
+          <a class="nav-link" href="#catalog">Rankings</a>
+          <a class="nav-link" href="#catalog">Ori</a>
+        </nav>
+
+        <nav class="secondary-nav" aria-label="Resources">
+          <a class="top-link" href="https://models.dev" target="_blank" rel="noreferrer">Docs</a>
+          <a class="top-link" href="#">Chat</a>
+          <a class="top-link" href="#">Pricing</a>
+        </nav>
+
         <div class="topbar-actions">
           <button
             class="icon-button theme-toggle"
@@ -62,249 +83,271 @@
               />
             </svg>
           </button>
+          <a class="top-link sales-link" href="#">Talk to sales</a>
+          <a class="auth-link" href="#">Sign in</a>
+          <a class="auth-link auth-signup" href="#">Sign up</a>
         </div>
       </div>
     </header>
 
     <main class="canvas">
-      <div class="title-row">
-        <div>
-          <h1>Model catalog</h1>
-          <p class="sub">Prices, context and capabilities from models.dev.</p>
-        </div>
-      </div>
+      <div class="catalog-layout">
+        <aside class="sidebar toolbar" aria-label="Model filters">
+          <div class="facet-filters" id="facetFilters" role="group" aria-label="Filter the catalog"></div>
 
-      <section class="summary" aria-label="Summary of the models in view" aria-live="polite">
-        <div class="summary-cell">
-          <span class="summary-label">Providers in view</span>
-          <span class="summary-value" id="statProv"><span class="skeleton skeleton-value"></span></span>
-        </div>
-        <div class="summary-cell">
-          <span class="summary-label" title="US dollars per 1M tokens">Median input <span class="unit">/1M</span></span>
-          <span class="summary-value" id="statMedIn"><span class="skeleton skeleton-value"></span></span>
-        </div>
-        <div class="summary-cell">
-          <span class="summary-label" title="US dollars per 1M tokens">Median output <span class="unit">/1M</span></span>
-          <span class="summary-value" id="statMedOut"><span class="skeleton skeleton-value"></span></span>
-        </div>
-        <div class="summary-cell">
-          <span class="summary-label">Largest context</span>
-          <span class="summary-value" id="statMaxCtx"><span class="skeleton skeleton-value"></span></span>
-        </div>
-      </section>
-
-      <div class="toolbar" role="search">
-        <div class="search-field">
-          <svg class="search-icon" viewBox="0 0 16 16" aria-hidden="true">
-            <circle cx="7" cy="7" r="4.4" />
-            <path d="m10.4 10.4 3 3" />
-          </svg>
-          <input
-            id="searchBox"
-            type="search"
-            autocomplete="off"
-            spellcheck="false"
-            placeholder="Search models or providers"
-            aria-label="Search models"
-          />
-        </div>
-
-        <div class="facet-filters" id="facetFilters" role="group" aria-label="Filter the catalog"></div>
-
-        <button
-          class="button button-quiet range-toggle"
-          id="rangeToggle"
-          type="button"
-          aria-expanded="false"
-          aria-controls="rangePanel"
-        >
-          Price &amp; limits
-          <span class="disclosure" aria-hidden="true"></span>
-        </button>
-
-        <div class="facet-popover" id="facetPopover" role="dialog" aria-modal="true" aria-labelledby="facetMenuTitle" hidden>
-          <div class="facet-popover-head">
-            <h2 id="facetMenuTitle">Provider</h2>
-            <button class="icon-button icon-button-small" id="facetMenuClose" type="button" aria-label="Close filter">
-              <svg class="icon" viewBox="0 0 16 16" aria-hidden="true">
-                <path d="m4 4 8 8M12 4l-8 8" />
-              </svg>
-            </button>
-          </div>
-          <div class="facet-search" id="facetSearchWrap" hidden>
-            <input
-              id="facetMenuSearch"
-              type="search"
-              autocomplete="off"
-              spellcheck="false"
-              placeholder="Find provider"
-              aria-label="Find a provider"
-            />
-          </div>
-          <label class="facet-all">
-            <input type="checkbox" id="facetSelectAll" />
-            <span id="facetAllLabel">All items</span>
-          </label>
-          <div class="facet-items" id="facetMenuList"></div>
-        </div>
-      </div>
-
-      <div class="range-panel" id="rangePanel" hidden>
-        <div class="range-grid">
-          <fieldset class="range-group">
-            <legend>Context window <span class="unit">tokens</span></legend>
-            <div class="range-inputs">
-              <input type="number" id="contextMin" placeholder="min" min="0" aria-label="Minimum context window" />
-              <span class="range-dash" aria-hidden="true">–</span>
-              <input type="number" id="contextMax" placeholder="max" min="0" aria-label="Maximum context window" />
-            </div>
-          </fieldset>
-          <fieldset class="range-group">
-            <legend>Max output <span class="unit">tokens</span></legend>
-            <div class="range-inputs">
-              <input type="number" id="outputLimitMin" placeholder="min" min="0" aria-label="Minimum max output" />
-              <span class="range-dash" aria-hidden="true">–</span>
-              <input type="number" id="outputLimitMax" placeholder="max" min="0" aria-label="Maximum max output" />
-            </div>
-          </fieldset>
-          <fieldset class="range-group">
-            <legend>Input price <span class="unit">$ per 1M tokens</span></legend>
-            <div class="range-inputs">
-              <input type="number" id="costInputMin" placeholder="min" min="0" step="0.01" aria-label="Minimum input price" />
-              <span class="range-dash" aria-hidden="true">–</span>
-              <input type="number" id="costInputMax" placeholder="max" min="0" step="0.01" aria-label="Maximum input price" />
-            </div>
-          </fieldset>
-          <fieldset class="range-group">
-            <legend>Output price <span class="unit">$ per 1M tokens</span></legend>
-            <div class="range-inputs">
-              <input type="number" id="costOutputMin" placeholder="min" min="0" step="0.01" aria-label="Minimum output price" />
-              <span class="range-dash" aria-hidden="true">–</span>
-              <input type="number" id="costOutputMax" placeholder="max" min="0" step="0.01" aria-label="Maximum output price" />
-            </div>
-          </fieldset>
-        </div>
-        <label class="check-row">
-          <input type="checkbox" id="excludePlan" />
-          <span>Exclude subscription plans <span class="hint">Hides plan-only providers such as GitLab Duo and Kimi for Coding.</span></span>
-        </label>
-        <label class="check-row">
-          <input type="checkbox" id="excludeChina" />
-          <span>Exclude China region <span class="hint">Hides China-region providers such as Alibaba (China) and AMD China (developer.amd.com.cn).</span></span>
-        </label>
-        <label class="check-row">
-          <input type="checkbox" id="excludeDeprecated" />
-          <span>Exclude deprecated <span class="hint">Hides models their provider marks as deprecated.</span></span>
-        </label>
-      </div>
-
-      <div class="active-filters" id="activeFilters" hidden></div>
-
-      <div class="results-head">
-        <div class="results-summary">
-          <p class="results-count" id="footInfo">Loading the catalog…</p>
-          <div class="match-row">
-            <div class="match-bar" id="matchBar" role="img" aria-label="Share of the catalog in view">
-              <span class="match-fill" id="matchFill"></span>
-            </div>
-            <span class="match-label" id="matchLabel"></span>
-          </div>
-        </div>
-
-        <div class="sort-control">
-          <label for="sortSelect">Sort by</label>
-          <select id="sortSelect" class="select" aria-label="Sort models by"></select>
-          <button class="icon-button sort-direction" id="sortDir" type="button" aria-label="Reverse sort order">
-            <span id="sortDirArrow" aria-hidden="true">↓</span>
+          <button
+            class="filter-button filter-advanced"
+            id="rangeToggle"
+            type="button"
+            aria-expanded="false"
+            aria-controls="rangePanel"
+          >
+            <span class="filter-name">Price &amp; limits</span>
+            <span class="disclosure" aria-hidden="true"></span>
           </button>
-        </div>
 
-        <div class="export-control" role="group" aria-label="Export the models in view">
-          <button class="button button-quiet" id="exportCsvBtn" type="button">Export CSV</button>
-          <button class="button button-quiet" id="exportJsonBtn" type="button">Export JSON</button>
+          <div class="range-panel" id="rangePanel" hidden>
+            <div class="range-grid">
+              <fieldset class="range-group">
+                <legend>Context window <span class="unit">tokens</span></legend>
+                <div class="range-inputs">
+                  <input type="number" id="contextMin" placeholder="min" min="0" aria-label="Minimum context window" />
+                  <span class="range-dash" aria-hidden="true">–</span>
+                  <input type="number" id="contextMax" placeholder="max" min="0" aria-label="Maximum context window" />
+                </div>
+              </fieldset>
+              <fieldset class="range-group">
+                <legend>Max output <span class="unit">tokens</span></legend>
+                <div class="range-inputs">
+                  <input type="number" id="outputLimitMin" placeholder="min" min="0" aria-label="Minimum max output" />
+                  <span class="range-dash" aria-hidden="true">–</span>
+                  <input type="number" id="outputLimitMax" placeholder="max" min="0" aria-label="Maximum max output" />
+                </div>
+              </fieldset>
+              <fieldset class="range-group">
+                <legend>Input price <span class="unit">$ per 1M tokens</span></legend>
+                <div class="range-inputs">
+                  <input type="number" id="costInputMin" placeholder="min" min="0" step="0.01" aria-label="Minimum input price" />
+                  <span class="range-dash" aria-hidden="true">–</span>
+                  <input type="number" id="costInputMax" placeholder="max" min="0" step="0.01" aria-label="Maximum input price" />
+                </div>
+              </fieldset>
+              <fieldset class="range-group">
+                <legend>Output price <span class="unit">$ per 1M tokens</span></legend>
+                <div class="range-inputs">
+                  <input type="number" id="costOutputMin" placeholder="min" min="0" step="0.01" aria-label="Minimum output price" />
+                  <span class="range-dash" aria-hidden="true">–</span>
+                  <input type="number" id="costOutputMax" placeholder="max" min="0" step="0.01" aria-label="Maximum output price" />
+                </div>
+              </fieldset>
+            </div>
+            <label class="check-row">
+              <input type="checkbox" id="excludePlan" />
+              <span>Exclude subscription plans <span class="hint">Hides plan-only providers such as GitLab Duo.</span></span>
+            </label>
+            <label class="check-row">
+              <input type="checkbox" id="excludeChina" />
+              <span>Exclude China region <span class="hint">Hides China-region providers.</span></span>
+            </label>
+            <label class="check-row">
+              <input type="checkbox" id="excludeDeprecated" />
+              <span>Exclude deprecated <span class="hint">Hides models their provider marks as deprecated.</span></span>
+            </label>
+          </div>
+
+          <div class="facet-popover" id="facetPopover" role="group" aria-labelledby="facetMenuTitle" hidden>
+            <div class="facet-popover-head">
+              <h2 id="facetMenuTitle">Filter</h2>
+              <button class="icon-button icon-button-small" id="facetMenuClose" type="button" aria-label="Close filter">
+                <svg class="icon" viewBox="0 0 16 16" aria-hidden="true">
+                  <path d="m4 4 8 8M12 4l-8 8" />
+                </svg>
+              </button>
+            </div>
+            <div class="facet-search" id="facetSearchWrap" hidden>
+              <input
+                id="facetMenuSearch"
+                type="search"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="Find provider"
+                aria-label="Find a provider"
+              />
+            </div>
+            <label class="facet-all">
+              <input type="checkbox" id="facetSelectAll" />
+              <span id="facetAllLabel">All items</span>
+            </label>
+            <div class="facet-items" id="facetMenuList"></div>
+          </div>
+        </aside>
+
+        <div class="content">
+          <div class="title-row">
+            <div>
+              <h1>Models</h1>
+              <p class="sub">Prices, context and capabilities from models.dev.</p>
+            </div>
+            <div class="page-actions">
+              <a class="button" href="#catalog">Compare</a>
+              <a class="button button-accent" href="#catalog">Discover Models</a>
+            </div>
+          </div>
+
+          <section class="summary" aria-label="Summary of the models in view" aria-live="polite">
+            <div class="summary-cell">
+              <span class="summary-label">Providers in view</span>
+              <span class="summary-value" id="statProv"><span class="skeleton skeleton-value"></span></span>
+            </div>
+            <div class="summary-cell">
+              <span class="summary-label" title="US dollars per 1M tokens">Median input <span class="unit">/1M</span></span>
+              <span class="summary-value" id="statMedIn"><span class="skeleton skeleton-value"></span></span>
+            </div>
+            <div class="summary-cell">
+              <span class="summary-label" title="US dollars per 1M tokens">Median output <span class="unit">/1M</span></span>
+              <span class="summary-value" id="statMedOut"><span class="skeleton skeleton-value"></span></span>
+            </div>
+            <div class="summary-cell">
+              <span class="summary-label">Largest context</span>
+              <span class="summary-value" id="statMaxCtx"><span class="skeleton skeleton-value"></span></span>
+            </div>
+          </section>
+
+          <div class="controls-row">
+            <div class="search-field">
+              <svg class="search-icon" viewBox="0 0 16 16" aria-hidden="true">
+                <circle cx="7" cy="7" r="4.4" />
+                <path d="m10.4 10.4 3 3" />
+              </svg>
+              <input
+                id="searchBox"
+                type="search"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="Search models..."
+                aria-label="Search models"
+              />
+            </div>
+
+            <button class="control-button" type="button" aria-label="All model variants">All variants</button>
+
+            <div class="sort-control">
+              <label class="sr-only" for="sortSelect">Sort by</label>
+              <select id="sortSelect" class="select" aria-label="Sort models by"></select>
+              <button class="icon-button sort-direction" id="sortDir" type="button" aria-label="Reverse sort order">
+                <span id="sortDirArrow" aria-hidden="true">↓</span>
+              </button>
+            </div>
+
+            <div class="view-switch" role="tablist" aria-label="Catalog view">
+              <button class="view-tab is-active" type="button" role="tab" data-view="list" aria-selected="true">List</button>
+              <button class="view-tab" type="button" role="tab" data-view="table" aria-selected="false">Table</button>
+            </div>
+          </div>
+
+          <div class="category-tabs" role="tablist" aria-label="Model category">
+            <button class="category-tab is-active" type="button" role="tab" data-category="all" aria-selected="true">All</button>
+            <button class="category-tab" type="button" role="tab" data-category="text" aria-selected="false">Text <span data-count="text"></span></button>
+            <button class="category-tab" type="button" role="tab" data-category="image" aria-selected="false">Image <span data-count="image"></span></button>
+            <button class="category-tab" type="button" role="tab" data-category="video" aria-selected="false">Video <span data-count="video"></span></button>
+            <button class="category-tab" type="button" role="tab" data-category="speech" aria-selected="false">Speech <span data-count="speech"></span></button>
+            <button class="category-tab" type="button" role="tab" data-category="decisions" aria-selected="false">Decisions <span data-count="decisions"></span></button>
+            <button class="category-tab" type="button" role="tab" data-category="embeddings" aria-selected="false">Embeddings <span data-count="embeddings"></span></button>
+            <button class="category-tab" type="button" role="tab" data-category="rerank" aria-selected="false">Rerank <span data-count="rerank"></span></button>
+          </div>
+
+          <div class="active-filters" id="activeFilters" hidden></div>
+
+          <div class="results-head">
+            <div class="results-summary">
+              <p class="results-count" id="footInfo">Loading the catalog…</p>
+              <div class="match-row">
+                <div class="match-bar" id="matchBar" role="img" aria-label="Share of the catalog in view">
+                  <span class="match-fill" id="matchFill"></span>
+                </div>
+                <span class="match-label" id="matchLabel"></span>
+              </div>
+            </div>
+
+            <div class="export-control" role="group" aria-label="Export the models in view">
+              <button class="button button-quiet" id="exportCsvBtn" type="button">Export CSV</button>
+              <button class="button button-quiet" id="exportJsonBtn" type="button">Export JSON</button>
+            </div>
+          </div>
+
+          <section class="table-panel list-view" id="catalog" aria-label="Models">
+            <div class="notice" id="errorBox" role="alert" hidden>
+              <div class="notice-message">
+                <svg class="notice-icon" viewBox="0 0 16 16" aria-hidden="true">
+                  <path d="M8 2.4 14.2 13H1.8L8 2.4Z" />
+                  <path d="M8 6.2v3.2M8 11.4v.2" />
+                </svg>
+                <p>
+                  <strong>Couldn’t load the catalog.</strong>
+                  <span id="errorMessage">Check your connection and try again.</span>
+                </p>
+              </div>
+              <button class="button" id="retryBtn" type="button">Try again</button>
+            </div>
+
+            <table class="catalog-table">
+              <colgroup>
+                <col class="col-model" />
+                <col class="col-in" />
+                <col class="col-out" />
+                <col class="col-context" />
+                <col class="col-output" />
+                <col class="col-caps" />
+                <col class="col-modalities" />
+                <col class="col-released" />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th scope="col" data-key="model" aria-sort="none">
+                    <button class="sort-button" type="button">Model Name <span class="arrow" aria-hidden="true">↑</span></button>
+                  </th>
+                  <th scope="col" data-key="costInput" class="num" aria-sort="none">
+                    <button class="sort-button" type="button">Input <span class="arrow" aria-hidden="true">↑</span></button>
+                  </th>
+                  <th scope="col" data-key="costOutput" class="num" aria-sort="none">
+                    <button class="sort-button" type="button">Output <span class="arrow" aria-hidden="true">↑</span></button>
+                  </th>
+                  <th scope="col" data-key="context" class="num" aria-sort="none">
+                    <button class="sort-button" type="button">Context <span class="arrow" aria-hidden="true">↑</span></button>
+                  </th>
+                  <th scope="col" data-key="outputLimit" class="num" aria-sort="none">
+                    <button class="sort-button" type="button">Max output <span class="arrow" aria-hidden="true">↑</span></button>
+                  </th>
+                  <th scope="col">Capabilities</th>
+                  <th scope="col">Modalities</th>
+                  <th scope="col" data-key="releaseDate" class="num" aria-sort="none">
+                    <button class="sort-button" type="button">Released <span class="arrow" aria-hidden="true">↑</span></button>
+                  </th>
+                </tr>
+              </thead>
+              <tbody id="tbody"></tbody>
+            </table>
+
+            <div class="table-foot">
+              <p class="table-range" id="tableRange"></p>
+            </div>
+          </section>
+
+          <footer class="pagefoot">
+            <div class="legend" aria-label="Capability marks">
+              <span><span class="cap on" aria-hidden="true">R</span> Reasoning</span>
+              <span><span class="cap on" aria-hidden="true">T</span> Tool call</span>
+              <span><span class="cap on" aria-hidden="true">V</span> Vision</span>
+              <span><span class="cap on" aria-hidden="true">S</span> Structured output</span>
+              <span><span class="cap on" aria-hidden="true">O</span> Open weights</span>
+            </div>
+            <p class="source-note">
+              Prices in USD per 1M tokens. Data from
+              <a href="https://models.dev" target="_blank" rel="noreferrer">models.dev</a>. Catalog is an independent viewer.
+            </p>
+          </footer>
         </div>
       </div>
-
-      <section class="table-panel" id="catalog" aria-label="Models">
-        <div class="notice" id="errorBox" role="alert" hidden>
-          <div class="notice-message">
-            <svg class="notice-icon" viewBox="0 0 16 16" aria-hidden="true">
-              <path d="M8 2.4 14.2 13H1.8L8 2.4Z" />
-              <path d="M8 6.2v3.2M8 11.4v.2" />
-            </svg>
-            <p>
-              <strong>Couldn’t load the catalog.</strong>
-              <span id="errorMessage">Check your connection and try again.</span>
-            </p>
-          </div>
-          <button class="button" id="retryBtn" type="button">Try again</button>
-        </div>
-
-        <table class="catalog-table">
-          <colgroup>
-            <col class="col-provider" />
-            <col class="col-model" />
-            <col class="col-context" />
-            <col class="col-output" />
-            <col class="col-in" />
-            <col class="col-out" />
-            <col class="col-caps" />
-            <col class="col-modalities" />
-            <col class="col-released" />
-          </colgroup>
-          <thead>
-            <tr>
-              <th scope="col" data-key="provider" aria-sort="none">
-                <button class="sort-button" type="button">Provider <span class="arrow" aria-hidden="true">↑</span></button>
-              </th>
-              <th scope="col" data-key="model" aria-sort="none">
-                <button class="sort-button" type="button">Model <span class="arrow" aria-hidden="true">↑</span></button>
-              </th>
-              <th scope="col" data-key="context" class="num" aria-sort="none">
-                <button class="sort-button" type="button">Context <span class="arrow" aria-hidden="true">↑</span></button>
-              </th>
-              <th scope="col" data-key="outputLimit" class="num" aria-sort="none">
-                <button class="sort-button" type="button">Max output <span class="arrow" aria-hidden="true">↑</span></button>
-              </th>
-              <th scope="col" data-key="costInput" class="num" aria-sort="none">
-                <button class="sort-button" type="button">In /1M <span class="arrow" aria-hidden="true">↑</span></button>
-              </th>
-              <th scope="col" data-key="costOutput" class="num" aria-sort="none">
-                <button class="sort-button" type="button">Out /1M <span class="arrow" aria-hidden="true">↑</span></button>
-              </th>
-              <th scope="col">Capabilities</th>
-              <th scope="col">Modalities</th>
-              <th scope="col" data-key="releaseDate" class="num" aria-sort="none">
-                <button class="sort-button" type="button">Released <span class="arrow" aria-hidden="true">↑</span></button>
-              </th>
-            </tr>
-          </thead>
-          <tbody id="tbody"></tbody>
-        </table>
-
-        <div class="table-foot">
-          <p class="table-range" id="tableRange"></p>
-          <nav class="pagination" id="pagination" aria-label="Pages">
-            <button class="page-arrow" id="pagePrev" type="button" aria-label="Previous page" disabled>‹</button>
-            <div class="page-numbers" id="pageNumbers"></div>
-            <button class="page-arrow" id="pageNext" type="button" aria-label="Next page" disabled>›</button>
-          </nav>
-        </div>
-      </section>
-
-      <footer class="pagefoot">
-        <div class="legend" aria-label="Capability marks">
-          <span><span class="cap on" aria-hidden="true">R</span> Reasoning</span>
-          <span><span class="cap on" aria-hidden="true">T</span> Tool call</span>
-          <span><span class="cap on" aria-hidden="true">V</span> Vision</span>
-          <span><span class="cap on" aria-hidden="true">S</span> Structured output</span>
-          <span><span class="cap on" aria-hidden="true">O</span> Open weights</span>
-        </div>
-        <p class="source-note">
-          Prices in USD per 1M tokens. Data from
-          <a href="https://models.dev" target="_blank" rel="noreferrer">models.dev</a>. Catalog is an independent viewer.
-        </p>
-      </footer>
     </main>
 
     <noscript>

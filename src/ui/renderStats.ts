@@ -20,8 +20,9 @@ export function renderStats(
     elements: StatsElements,
     filteredRows: ModelRow[],
     totalRows: number,
-    firstRow: number,
+    _firstRow: number,
     lastRow: number,
+    hasMore = false,
 ): void {
     const providerCount = new Set(filteredRows.map((row) => row.provider)).size;
     const inputMedian = median(filteredRows.map((row) => row.costInput));
@@ -40,9 +41,12 @@ export function renderStats(
         elements.footInfo.textContent = "No models in view";
         elements.tableRange.textContent = "No matches";
     } else {
-        // The count above the table states the total; the range sits with the paging at the end.
+        // The count above the table states the total; the foot notes how much has been revealed.
         elements.footInfo.textContent = `${filteredRows.length.toLocaleString(locale)} models`;
-        elements.tableRange.textContent = `${firstRow.toLocaleString(locale)}–${lastRow.toLocaleString(locale)} of ${filteredRows.length.toLocaleString(locale)}`;
+        const total = filteredRows.length.toLocaleString(locale);
+        elements.tableRange.textContent = hasMore
+            ? `Showing ${lastRow.toLocaleString(locale)} of ${total} models · scroll for more`
+            : `All ${total} models shown`;
     }
 
     const share = totalRows === 0 ? 0 : (filteredRows.length / totalRows) * 100;
